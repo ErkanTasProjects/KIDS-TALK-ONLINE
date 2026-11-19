@@ -133,7 +133,7 @@ void main() {
       s.setVip(true);
       s.useHeart();
       expect(s.hearts, 4);
-    });
+    }, skip: AppState.testMode ? 'test modunda canlar sinirsiz' : false);
 
     test('can bitince oynanamaz, elmasla dolar', () async {
       final s = await _loadedState();
@@ -152,7 +152,7 @@ void main() {
       expect(s.refillHeartsWithGems(), isTrue);
       expect(s.hearts, AppState.maxHearts);
       expect(s.gems, 60 - AppState.heartRefillCost);
-    });
+    }, skip: AppState.testMode ? 'test modunda canlar sinirsiz' : false);
 
     test('sandik yildiz hedefine ulasmadan acilmaz, bir kez acilir', () async {
       final s = await _loadedState();

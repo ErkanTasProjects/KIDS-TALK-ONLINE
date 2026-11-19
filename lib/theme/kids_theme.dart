@@ -37,7 +37,7 @@ class Land {
     dark: Color(0xFF0F8F82),
     light: Color(0xFFE6FBF8),
     mascotA: 'assets/images/gigi_waving.png',
-    mascotB: 'assets/images/piko_cropped.png',
+    mascotB: 'assets/images/gigi_pointing.png',
   );
 
   static const movers = Land(
@@ -50,7 +50,7 @@ class Land {
     dark: Color(0xFF6D3FD8),
     light: Color(0xFFF3EEFF),
     mascotA: 'assets/images/gigi_pointing.png',
-    mascotB: 'assets/images/piko_cropped.png',
+    mascotB: 'assets/images/gigi_thinking.png',
   );
 
   static const flyers = Land(
@@ -63,7 +63,7 @@ class Land {
     dark: Color(0xFFD96F00),
     light: Color(0xFFFFF3E3),
     mascotA: 'assets/images/gigi_thinking.png',
-    mascotB: 'assets/images/piko_cropped.png',
+    mascotB: 'assets/images/gigi_waving.png',
   );
 
   static const all = [starter, movers, flyers];

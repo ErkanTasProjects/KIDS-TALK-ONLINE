@@ -3,6 +3,10 @@ import '../data/curriculum_data.dart';
 import '../services/storage_service.dart';
 
 class AppState extends ChangeNotifier {
+  /// TEST MODU: sinirsiz can + tum dersler acik.
+  /// Yayina cikmadan once false yapilmali.
+  static const bool testMode = true;
+
   final StorageService _storage = StorageService();
 
   // Kullanici Istatistikleri (yeni kullanici sifirdan baslar)
@@ -130,7 +134,10 @@ class AppState extends ChangeNotifier {
   static const int heartRefillCost = 20; // elmas
 
   /// VIP degilse ve can bittiyse ders oynanamaz.
-  bool get canPlay => _isVip || _hearts > 0;
+  bool get canPlay => testMode || _isVip || _hearts > 0;
+
+  /// Sinirsiz can (VIP ya da test modu)
+  bool get unlimitedHearts => testMode || _isVip;
 
   /// Bir sonraki canin dolmasina kalan sure (canlar doluysa null).
   Duration? get timeToNextHeart {
@@ -187,7 +194,7 @@ class AppState extends ChangeNotifier {
 
   // Can Dusurme (Yanlis cevap)
   void useHeart() {
-    if (_isVip) return; // Star Club: sinirsiz can
+    if (unlimitedHearts) return; // Star Club / test modu: sinirsiz can
     _regenHearts();
     if (_hearts > 0) {
       if (_hearts == maxHearts) {
@@ -331,6 +338,7 @@ class AppState extends ChangeNotifier {
 
   /// Ilk ders hep acik; digerleri mufredat sirasindaki onceki ders bitince acilir.
   bool isUnlocked(ActivityItem activity) {
+    if (testMode) return true;
     final all = CurriculumData.activities;
     final i = all.indexWhere((a) => a.id == activity.id);
     if (i <= 0) return true;

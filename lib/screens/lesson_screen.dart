@@ -358,7 +358,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                       )),
                   const SizedBox(width: 8),
                   Text(
-                    context.watch<AppState>().isVip ? "💖∞" : "💖$hearts",
+                    context.watch<AppState>().unlimitedHearts ? "💖∞" : "💖$hearts",
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFFE53935)),
                   ),
                 ],

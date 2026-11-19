@@ -230,7 +230,7 @@ class _TopStatsBar extends StatelessWidget {
           const Spacer(),
           _Stat(
             icon: const Text('💖', style: TextStyle(fontSize: 21)),
-            value: appState.isVip ? '∞' : '${appState.hearts}',
+            value: appState.unlimitedHearts ? '∞' : '${appState.hearts}',
             color: KidsColors.heart,
             onTap: () => showHeartsInfo(context, appState),
           ),
@@ -290,7 +290,7 @@ class _Stat extends StatelessWidget {
 /// Can bilgisi: dolu mu, sonraki can ne zaman, elmasla doldurma.
 void showHeartsInfo(BuildContext context, AppState appState) {
   appState.refreshHearts();
-  final full = appState.isVip || appState.hearts >= AppState.maxHearts;
+  final full = appState.unlimitedHearts || appState.hearts >= AppState.maxHearts;
   final wait = appState.timeToNextHeart;
   final mins = wait == null ? 0 : (wait.inSeconds / 60).ceil();
   final canBuy = appState.gems >= AppState.heartRefillCost;
@@ -302,7 +302,7 @@ void showHeartsInfo(BuildContext context, AppState appState) {
     builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: Text(
-        appState.isVip ? "💖 Unlimited hearts" : "💖 ${appState.hearts} / ${AppState.maxHearts}",
+        appState.unlimitedHearts ? "💖 Unlimited hearts" : "💖 ${appState.hearts} / ${AppState.maxHearts}",
         textAlign: TextAlign.center,
         style: const TextStyle(fontWeight: FontWeight.w900),
       ),

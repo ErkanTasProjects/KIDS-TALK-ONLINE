@@ -37,7 +37,7 @@ class QuestsScreen extends StatelessWidget {
             title: 'Quests',
             subtitle: 'Finish quests, win treasure!',
             color: Color(0xFF8B5CF6),
-            image: 'assets/images/piko_cropped.png',
+            image: 'assets/images/gigi_pointing.png',
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
