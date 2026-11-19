@@ -145,7 +145,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 650),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
               children: [
                 // 1. Kozmik Kulup Basligi
                 Container(

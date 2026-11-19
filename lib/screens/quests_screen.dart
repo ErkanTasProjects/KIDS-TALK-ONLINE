@@ -73,7 +73,7 @@ class _QuestsScreenState extends State<QuestsScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 650),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
               children: [
                 // 1. Ust Macera Banner'i (Kids Talk Ozel Tasarimi)
                 Container(

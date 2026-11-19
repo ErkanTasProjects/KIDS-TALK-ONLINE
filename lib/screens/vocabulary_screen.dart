@@ -209,7 +209,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                 // Kart Listesi
                 Expanded(
                   child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 80),
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
                     itemCount: filteredList.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {

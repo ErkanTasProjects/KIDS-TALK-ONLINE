@@ -63,6 +63,8 @@ class WeeklyLeagueDialog extends StatelessWidget {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
+      // Sistem gezinme cubugunun altinda kalmasin
+      padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom),
       decoration: const BoxDecoration(
         color: Color(0xFFFFFBF5),
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),

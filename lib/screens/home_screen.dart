@@ -431,7 +431,7 @@ class _DuolingoPathView extends StatelessWidget {
 
     return ListView.builder(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemCount: activities.length + 1, // +1 for the Unit Header
       itemBuilder: (context, index) {
         if (index == 0) {
@@ -1030,8 +1030,11 @@ class _LessonStartBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final characterInfo = KidsCharacterInfo.fromName(activity.characterName);
 
+    // Alt bosluga sistem gezinme cubugu yuksekligi eklenir; yoksa START
+    // butonu telefonun alt cubugunun altinda kaliyordu.
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + bottomInset),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(32)),

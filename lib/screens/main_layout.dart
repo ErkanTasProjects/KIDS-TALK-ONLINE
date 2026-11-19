@@ -56,9 +56,16 @@ class _MainLayoutState extends State<MainLayout> {
           child: Column(
             children: [
               Expanded(
-                child: IndexedStack(
-                  index: _selectedIndex,
-                  children: _screens,
+                // Alt sistem boslugunu alt menu zaten birakiyor; ekranlarin
+                // SafeArea'si bir kez daha birakinca menunun ustunde bos bir
+                // serit olusuyordu. Icerik icin alt boslugu kaldir.
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeBottom: true,
+                  child: IndexedStack(
+                    index: _selectedIndex,
+                    children: _screens,
+                  ),
                 ),
               ),
               _buildBottomNav(),
