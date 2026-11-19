@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../data/curriculum_data.dart';
 import 'package:provider/provider.dart';
 import '../services/sound_service.dart';
 import '../state/app_state.dart';
 import '../utils/app_strings.dart';
+import '../widgets/parent_gate.dart';
 import '../widgets/weekly_league_dialog.dart';
 import 'explorer_builder_screen.dart';
 
@@ -14,85 +16,18 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  double _speechRate = 0.48;
+  double _speechRate = SoundService().speechSliderValue;
 
-  void _showParentGate() {
-    final isTurkish = context.read<AppState>().isTurkish;
-    final TextEditingController answerController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: [
-            const Text("🛡️", style: TextStyle(fontSize: 24)),
-            const SizedBox(width: 8),
-            Text(
-              AppStrings.tr('parent_gate_title', isTurkish),
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              AppStrings.tr('parent_gate_desc', isTurkish),
-              style: const TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            const Center(
-              child: Text(
-                "8 + 6 = ?",
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Color(0xFF7B1FA2)),
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: answerController,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
-                hintText: 'Answer',
-                filled: true,
-                fillColor: Colors.purple.shade50,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('CANCEL'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF7B1FA2),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
-            onPressed: () {
-              if (answerController.text.trim() == "14") {
-                Navigator.of(ctx).pop();
-                _showParentReport();
-              } else {
-                SoundService().playWrong();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Incorrect answer, try again.'),
-                  ),
-                );
-              }
-            },
-            child: Text('ENTER'),
-          )
-        ],
-      ),
-    );
+  /// Her seferinde farkli soru soran ortak ebeveyn kilidi
+  /// (eskiden hep "8 + 6 = ?" soruluyordu, cocuk ezberleyebiliyordu).
+  Future<void> _showParentGate() async {
+    final ok = await showParentGate(context);
+    if (!mounted) return;
+    if (ok) {
+      _showParentReport();
+    } else {
+      SoundService().playWrong();
+    }
   }
 
   void _showParentReport() {
@@ -122,11 +57,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 16),
             _buildReportMetric(
               AppStrings.tr('metric_completion', isTurkish),
-              "%${((appState.totalStars / 12) * 100).clamp(0, 100).toInt()}",
+              "%${((appState.totalStars / (CurriculumData.activities.length * 3)) * 100).clamp(0, 100).toInt()}",
               Colors.green,
             ),
-            _buildReportMetric(AppStrings.tr('metric_listening', isTurkish), "%95", Colors.blue),
-            _buildReportMetric(AppStrings.tr('metric_vocabulary', isTurkish), "32 Words", Colors.purple),
+            // Gercek veriler (eskiden "%95" ve "32 Words" sabit yaziliydi)
+            _buildReportMetric(
+              "Lessons completed",
+              "${CurriculumData.activities.where((a) => appState.getStarsFor(a.id) > 0).length} / ${CurriculumData.activities.length}",
+              Colors.blue,
+            ),
+            _buildReportMetric(
+              AppStrings.tr('metric_vocabulary', isTurkish),
+              "${appState.learnedWords.length} Words",
+              Colors.purple,
+            ),
             _buildReportMetric(
               AppStrings.tr('metric_streak', isTurkish),
               "${appState.streak} ${'Days'}",
@@ -563,7 +507,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         subtitle: Text(AppStrings.tr('sound_desc', isTurkish)),
                         value: appState.isSoundEnabled,
                         activeColor: const Color(0xFF7B1FA2),
-                        onChanged: (v) => appState.toggleSound(),
+                        // Eskiden ayar kaydediliyor ama ses motoruna iletilmiyordu
+                        onChanged: (v) {
+                          appState.toggleSound();
+                          SoundService().setAudioSettings(
+                            soundEnabled: v,
+                            musicEnabled: appState.isMusicEnabled,
+                          );
+                        },
                       ),
                       Divider(color: Colors.grey.shade200),
                       SwitchListTile(

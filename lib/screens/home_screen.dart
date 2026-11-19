@@ -310,11 +310,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ],
                   ),
                   borderColor: Colors.red.shade200,
-                  onTap: () {
-                    appState.refillHearts();
-                    SoundService().playCorrect();
-                    SoundService().speakEnglish("Full hearts! Ready to play!");
-                  },
+                  // Eskiden kalbe dokunmak canlari bedavaya dolduruyordu
+                  onTap: () => _showHeartsInfo(context, appState),
                 ),
                 const SizedBox(width: 6),
 
@@ -334,6 +331,58 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Can bilgisi: dolu mu, sonraki can ne zaman, elmasla doldurma.
+  void _showHeartsInfo(BuildContext context, AppState appState) {
+    appState.refreshHearts();
+    SoundService().playPop();
+    final full = appState.isVip || appState.hearts >= AppState.maxHearts;
+    final wait = appState.timeToNextHeart;
+    final mins = wait == null ? 0 : (wait.inSeconds / 60).ceil();
+    final canBuy = appState.gems >= AppState.heartRefillCost;
+
+    if (full) {
+      SoundService().speakEnglish("Full hearts! Ready to play!");
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          appState.isVip ? "💖 Unlimited hearts" : "💖 ${appState.hearts} / ${AppState.maxHearts}",
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontWeight: FontWeight.w900),
+        ),
+        content: Text(
+          full
+              ? "Your hearts are full. Ready to play!"
+              : "A wrong answer costs 1 heart.\nNext heart in $mins min.",
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text("OK")),
+          if (!full)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00ACC1),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: canBuy
+                  ? () {
+                      appState.refillHeartsWithGems();
+                      SoundService().playCorrect();
+                      SoundService().speakEnglish("Hearts refilled!");
+                      Navigator.of(ctx).pop();
+                    }
+                  : null,
+              child: Text("REFILL 💎 ${AppState.heartRefillCost}"),
+            ),
         ],
       ),
     );
@@ -425,6 +474,38 @@ class _DuolingoPathView extends StatelessWidget {
     required this.appState,
   });
 
+  /// Ilk ders hep acik; digerleri bir onceki ders (tum mufredat sirasinda)
+  /// en az 1 yildizla bitince acilir. Eski kayitlar icin Starter ilerleme
+  /// indeksi de gecerli sayilir.
+  bool _isUnlocked(ActivityItem activity) {
+    final all = CurriculumData.activities;
+    final globalIndex = all.indexWhere((a) => a.id == activity.id);
+    if (globalIndex <= 0) return true;
+    if (activity.stage.toLowerCase() == 'starter') {
+      final starterIndex = CurriculumData.getActivitiesByStage('Starter').indexWhere((a) => a.id == activity.id);
+      if (starterIndex <= appState.currentLevelIndex) return true;
+    }
+    final prev = all[globalIndex - 1];
+    if (appState.getStarsFor(prev.id) > 0) return true;
+    // Onceki ders Starter'da ilerleme indeksiyle tamamlanmis olabilir
+    if (prev.stage.toLowerCase() == 'starter') {
+      final prevStarterIndex = CurriculumData.getActivitiesByStage('Starter').indexWhere((a) => a.id == prev.id);
+      return prevStarterIndex < appState.currentLevelIndex;
+    }
+    return false;
+  }
+
+  /// Bu asamada bitirilen ders sayisi (eskiden her asamada "x of 5" sabitti).
+  int _completedIn(String stage) {
+    final list = CurriculumData.getActivitiesByStage(stage);
+    var done = 0;
+    for (var i = 0; i < list.length; i++) {
+      final starterDone = stage.toLowerCase() == 'starter' && i < appState.currentLevelIndex;
+      if (appState.getStarsFor(list[i].id) > 0 || starterDone) done++;
+    }
+    return done;
+  }
+
   @override
   Widget build(BuildContext context) {
     final activities = CurriculumData.getActivitiesByStage(stage);
@@ -441,13 +522,15 @@ class _DuolingoPathView extends StatelessWidget {
         final activityIndex = index - 1;
         final activity = activities[activityIndex];
 
-        // Seviye kilit ve durum mantigi
-        final bool isStarter = stage.toLowerCase() == 'starter';
-        final bool isUnlocked = (isStarter && activityIndex <= appState.currentLevelIndex) ||
-            (!isStarter && appState.currentLevelIndex >= 4);
-        final bool isCompleted = (isStarter && activityIndex < appState.currentLevelIndex) ||
-            (appState.getStarsFor(activity.id) > 0);
-        final bool isCurrent = isStarter && activityIndex == appState.currentLevelIndex;
+        // Seviye kilit ve durum mantigi: dersler mufredat sirasiyla tek tek acilir.
+        // Eskiden Starter bitince Movers VE Flyers'in tum dersleri birden aciliyordu
+        // (ustelik Starter ders sayisi koda 4 olarak gomuluydu).
+        final bool isUnlocked = _isUnlocked(activity);
+        final bool isCompleted = appState.getStarsFor(activity.id) > 0 ||
+            (stage.toLowerCase() == 'starter' && activityIndex < appState.currentLevelIndex);
+        final bool isCurrent = isUnlocked &&
+            !isCompleted &&
+            activities.indexWhere((a) => _isUnlocked(a) && appState.getStarsFor(a.id) == 0) == activityIndex;
 
         // Duolingo zikzak x-offseti: 0: Merkez, 1: Sag (+65), 2: Merkez, 3: Sol (-65)
         final int pattern = activityIndex % 4;
@@ -574,7 +657,7 @@ class _DuolingoPathView extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      "${(appState.currentLevelIndex).clamp(0, 5)} of 5",
+                      "${_completedIn(stage)} of ${CurriculumData.getActivitiesByStage(stage).length}",
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w900,
@@ -830,18 +913,6 @@ class _DuolingoNodeItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Duolingo Renk Paleti (Canli Yesil / Mor / Altin)
-    Color buttonColor = const Color(0xFF58CC02); // Canli Duolingo Yesili
-    Color shadowColor = const Color(0xFF46A302); // 3D Alt Kenar
-
-    if (isCompleted) {
-      buttonColor = const Color(0xFFFFC800); // Altın Şampiyon Sarısı
-      shadowColor = const Color(0xFFE5A500);
-    } else if (!isUnlocked) {
-      buttonColor = const Color(0xFFE5E5E5); // Kilitli Gri
-      shadowColor = const Color(0xFFBDBDBD);
-    }
-
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 14),
       child: Transform.translate(
@@ -1136,9 +1207,23 @@ class _LessonStartBottomSheet extends StatelessWidget {
           // 3D Duolingo Tarzi BASLA Butonu
           GestureDetector(
             onTap: () {
-              Navigator.of(context).pop();
+              final navigator = Navigator.of(context);
+              final appState = context.read<AppState>();
+              navigator.pop();
+              appState.refreshHearts();
+              if (!appState.canPlay) {
+                // Can yoksa ders baslamasin (eskiden 0 canla da oynaniyordu)
+                SoundService().playWrong();
+                ScaffoldMessenger.of(navigator.context).showSnackBar(
+                  const SnackBar(
+                    behavior: SnackBarBehavior.floating,
+                    content: Text("💔 No hearts left! Tap the heart at the top to refill."),
+                  ),
+                );
+                return;
+              }
               SoundService().playTap();
-              Navigator.of(context).push(
+              navigator.push(
                 AppPageRoute(
                   page: LessonScreen(activity: activity),
                 ),

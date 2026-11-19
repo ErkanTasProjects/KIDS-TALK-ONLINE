@@ -72,6 +72,7 @@ class AppState extends ChangeNotifier {
     _isVip = _storage.isVip();
 
     _checkStreak();
+    _regenHearts();
 
     _isLoaded = true;
     notifyListeners();
@@ -103,6 +104,11 @@ class AppState extends ChangeNotifier {
           _streak = 1; // 1 günden fazla ara verildiyse sıfırla
           _storage.saveStreak(_streak);
         }
+        // Her yeni gun canlar tamamen dolar
+        if (difference >= 1) {
+          _hearts = maxHearts;
+          _storage.saveHearts(_hearts);
+        }
       } catch (_) {}
       _storage.saveLastActiveDate(todayStr);
     }
@@ -119,17 +125,75 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  static const int maxHearts = 5;
+  static const Duration heartRegenTime = Duration(minutes: 20);
+  static const int heartRefillCost = 20; // elmas
+
+  /// VIP degilse ve can bittiyse ders oynanamaz.
+  bool get canPlay => _isVip || _hearts > 0;
+
+  /// Bir sonraki canin dolmasina kalan sure (canlar doluysa null).
+  Duration? get timeToNextHeart {
+    if (_hearts >= maxHearts) return null;
+    final last = _storage.getHeartsUpdatedAt();
+    if (last == null) return null;
+    final next = DateTime.fromMillisecondsSinceEpoch(last).add(heartRegenTime);
+    final left = next.difference(DateTime.now());
+    return left.isNegative ? Duration.zero : left;
+  }
+
+  /// Gecen sureye gore canlari yeniler (20 dakikada 1 can).
+  /// Eskiden canlar sadece ana ekrandaki kalbe dokununca bedavaya doluyordu.
+  void refreshHearts() {
+    if (_regenHearts()) notifyListeners();
+  }
+
+  bool _regenHearts() {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (_hearts >= maxHearts) {
+      _storage.saveHeartsUpdatedAt(nowMs);
+      return false;
+    }
+    final last = _storage.getHeartsUpdatedAt() ?? nowMs;
+    final gained = (nowMs - last) ~/ heartRegenTime.inMilliseconds;
+    if (gained <= 0) {
+      if (_storage.getHeartsUpdatedAt() == null) _storage.saveHeartsUpdatedAt(nowMs);
+      return false;
+    }
+    _hearts = (_hearts + gained).clamp(0, maxHearts);
+    _storage.saveHearts(_hearts);
+    _storage.saveHeartsUpdatedAt(
+      _hearts >= maxHearts ? nowMs : last + gained * heartRegenTime.inMilliseconds,
+    );
+    return true;
+  }
+
   // Can Yenileme (5 Can)
   void refillHearts() {
-    _hearts = 5;
+    _hearts = maxHearts;
     _storage.saveHearts(_hearts);
+    _storage.saveHeartsUpdatedAt(DateTime.now().millisecondsSinceEpoch);
     notifyListeners();
+  }
+
+  /// Elmasla can doldurma. Yeterli elmas yoksa false.
+  bool refillHeartsWithGems() {
+    if (_gems < heartRefillCost) return false;
+    _gems -= heartRefillCost;
+    _storage.saveGems(_gems);
+    refillHearts();
+    return true;
   }
 
   // Can Dusurme (Yanlis cevap)
   void useHeart() {
     if (_isVip) return; // Star Club: sinirsiz can
+    _regenHearts();
     if (_hearts > 0) {
+      if (_hearts == maxHearts) {
+        // Yenilenme sayaci ilk kayiptan itibaren baslar
+        _storage.saveHeartsUpdatedAt(DateTime.now().millisecondsSinceEpoch);
+      }
       _hearts--;
       _storage.saveHearts(_hearts);
       notifyListeners();
@@ -217,6 +281,37 @@ class AppState extends ChangeNotifier {
     _storage.saveGems(_gems);
     addXp(15 * stars);
   }
+
+  // --- Gorevler ---
+  static const int chestStarGoal = 20;
+  bool get isChestOpened => _storage.isChestOpened();
+  bool get canOpenChest => !isChestOpened && totalStars >= chestStarGoal;
+
+  /// Sandik sadece hedef yildiza ulasinca ve bir kez acilir.
+  /// (Eskiden 0 yildizla acilabiliyor, yeniden baslatinca tekrar aciliyordu.)
+  bool openChest() {
+    if (!canOpenChest) return false;
+    _storage.setChestOpened(true);
+    _gems += 50;
+    _storage.saveGems(_gems);
+    addXp(50);
+    return true;
+  }
+
+  static String _todayKey() {
+    final n = DateTime.now();
+    return "${n.year}-${n.month}-${n.day}";
+  }
+
+  bool get listenedToday => _storage.getDailyListenDate() == _todayKey();
+
+  void markListenedToday() {
+    if (listenedToday) return;
+    _storage.saveDailyListenDate(_todayKey());
+    notifyListeners();
+  }
+
+  bool get hasThreeStarLesson => _activityStars.values.any((v) => v >= 3);
 
   // VIP (Star Club) uyeligi
   void setVip(bool value) {

@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../data/curriculum_data.dart';
 import '../services/sound_service.dart';
@@ -68,6 +69,16 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
   final Map<int, List<dynamic>> _shuffledBalloonPopOptions = {};
   final Map<int, List<dynamic>> _shuffledFillBlankOptions = {};
 
+  // Hata sayisi -> yildiz (eskiden her ders hatasiz da hatali da 3 yildizdi)
+  int _mistakes = 0;
+  int get _earnedStars => _mistakes == 0 ? 3 : (_mistakes <= 2 ? 2 : 1);
+  bool _outOfHeartsShown = false;
+
+  // Sorular arasi gecis geri bildirimi
+  bool _isAdvancing = false;
+  String? _correctChoice;
+  String? _wrongChoice;
+
   @override
   void initState() {
     super.initState();
@@ -102,6 +113,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
   }
 
   void _triggerSuccess() {
+    if (_isStepCompleted) return;
     SoundService().playCorrect();
     setState(() {
       _isStepCompleted = true;
@@ -110,18 +122,118 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     });
 
     SoundService().speakEnglish("Great job! You did it!");
-    context.read<AppState>().addXp(15);
+
+    // Kutlama perdesi kisa bir sure gorunup kalksin (eskiden hic kalkmiyor,
+    // oyunun ustunde sari perde + dev emoji olarak kaliyordu)
+    Future.delayed(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _showCelebration = false);
+    });
+  }
+
+  /// Dogru cevaptan sonra kisa bir "dogru!" anini gosterip sonraki soruya gecer.
+  /// Eskiden yeni soru aninda beliriyor, cocuk dogru bildigini goremiyordu.
+  void _advanceAfterCorrect({required int total, VoidCallback? onNext}) {
+    _isAdvancing = true;
+    Future.delayed(const Duration(milliseconds: 850), () {
+      if (!mounted) return;
+      setState(() {
+        _isAdvancing = false;
+        _correctChoice = null;
+        _wrongChoice = null;
+        if (_currentStepIndex < total - 1) {
+          _currentStepIndex++;
+          onNext?.call();
+        } else {
+          _triggerSuccess();
+        }
+      });
+    });
+  }
+
+  void _flashWrong(String choice) {
+    setState(() => _wrongChoice = choice);
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted && _wrongChoice == choice) setState(() => _wrongChoice = null);
+    });
+  }
+
+  bool _isFinishing = false;
+
+  /// Yanlis cevap: can dusur, hata say, can bittiyse dersi durdur.
+  void _registerMistake() {
+    final appState = context.read<AppState>();
+    appState.useHeart();
+    setState(() => _mistakes++);
+    if (!appState.canPlay && !_outOfHeartsShown) {
+      _outOfHeartsShown = true;
+      _showOutOfHeartsDialog();
+    }
+  }
+
+  Future<void> _showOutOfHeartsDialog() async {
+    final appState = context.read<AppState>();
+    final wait = appState.timeToNextHeart;
+    final mins = wait == null ? 0 : (wait.inSeconds / 60).ceil();
+    final canBuy = appState.gems >= AppState.heartRefillCost;
+
+    final refilled = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text("💔 Out of hearts!", textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Text(
+          mins > 0
+              ? "Take a little break! A new heart comes in $mins min."
+              : "Take a little break and come back soon!",
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text("EXIT"),
+          ),
+          if (canBuy)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00ACC1),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                context.read<AppState>().refillHeartsWithGems();
+                Navigator.of(ctx).pop(true);
+              },
+              child: Text("REFILL 💎 ${AppState.heartRefillCost}"),
+            ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (refilled == true) {
+      _outOfHeartsShown = false;
+      SoundService().speakEnglish("Hearts refilled!");
+    } else {
+      SoundService().stop();
+      Navigator.of(context).pop();
+    }
   }
 
   void _finishActivity() {
+    if (_isFinishing) return; // cift tiklamada iki diyalog/cift odul olmasin
+    _isFinishing = true;
     SoundService().playVictory();
-    context.read<AppState>().completeActivity(widget.activity.id, 3);
+    final stars = _earnedStars;
+    // Odul tek yerden: completeActivity 15 XP x yildiz verir. Eskiden ayrica
+    // +15 XP daha ekleniyordu ve diyalogda yazan XP ile verilen tutmuyordu.
+    context.read<AppState>().completeActivity(widget.activity.id, stars);
     VictoryCelebrationDialog.show(
       context: context,
       characterName: widget.activity.characterName,
       activityTitle: widget.activity.title,
-      stars: 3,
-      xpEarned: 45,
+      stars: stars,
+      xpEarned: 15 * stars,
       onContinue: () {
         Navigator.of(context).pop();
       },
@@ -179,6 +291,11 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
+          scrolledUnderElevation: 0,
+          // Acik zemin: durum cubugu simgeleri koyu olsun (saat gorunmuyordu)
+          systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+            statusBarColor: Colors.transparent,
+          ),
           leading: Padding(
             padding: const EdgeInsets.only(left: 12),
             child: GestureDetector(
@@ -219,13 +336,20 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
           actions: [
             Padding(
               padding: const EdgeInsets.only(right: 16),
+              // Kalan yildizlar + canlar (eskiden sabit 3 yildizdi, can gorunmuyordu)
               child: Row(
-                children: const [
-                  Text("⭐", style: TextStyle(fontSize: 14)),
-                  SizedBox(width: 2),
-                  Text("⭐", style: TextStyle(fontSize: 14)),
-                  SizedBox(width: 2),
-                  Text("⭐", style: TextStyle(fontSize: 14)),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ...List.generate(3, (i) => Icon(
+                        Icons.star_rounded,
+                        size: 20,
+                        color: i < _earnedStars ? const Color(0xFFFFB300) : Colors.grey.shade300,
+                      )),
+                  const SizedBox(width: 8),
+                  Text(
+                    context.watch<AppState>().isVip ? "💖∞" : "💖$hearts",
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFFE53935)),
+                  ),
                 ],
               ),
             ),
@@ -246,8 +370,34 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
               // Ana Oyun Alani
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: _buildActivityGame(),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  // Sorular arasi yumusak gecis (eskiden yeni soru aniden beliriyordu)
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 320),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, anim) => FadeTransition(
+                      opacity: anim,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0.08, 0),
+                          end: Offset.zero,
+                        ).animate(anim),
+                        child: child,
+                      ),
+                    ),
+                    layoutBuilder: (current, previous) => Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ...previous.map((w) => IgnorePointer(child: w)),
+                        if (current != null) current,
+                      ],
+                    ),
+                    child: KeyedSubtree(
+                      key: ValueKey(_currentStepIndex),
+                      child: _buildActivityGame(),
+                    ),
+                  ),
                 ),
               ),
 
@@ -601,7 +751,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         SoundService().playWrong();
         SoundService().speakEnglish("Try again!");
         _characterFeedback = "Try again! You can do it! 💪";
-        context.read<AppState>().useHeart();
+        _registerMistake();
       }
 
       _selectedVisualId = null;
@@ -625,13 +775,17 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
       {'bg': const Color(0xFFE8F5E9), 'border': const Color(0xFF43A047), 'iconBg': const Color(0xFFC8E6C9)},
     ];
 
+    // Iki sutun icerik kadar yer kaplar (eskiden tepsi ekranin en altina kadar
+    // uzuyor, sol sutunun alti bos kaliyordu). Cumle sutunu daha genis ki
+    // "I wake up at / 7." gibi kotu satir bolunmeleri olmasin.
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // LEFT COLUMN: TARGET SLOTS ("Place Card Here!")
         Expanded(
-          flex: 6,
+          flex: 5,
           child: ListView.separated(
+            shrinkWrap: true,
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
             itemCount: targets.length,
@@ -660,7 +814,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                     setState(() {
                       _characterFeedback = 'Not this box, try again! 🤔';
                     });
-                    context.read<AppState>().useHeart();
+                    _registerMistake();
                   }
                 },
                 builder: (context, candidateData, rejectedData) {
@@ -670,6 +824,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                     onTap: () {
                       if (_selectedSentence != null && !isPlaced) {
                         if (_selectedSentence == target['sentence']) {
+                          SoundService().playCorrect();
                           setState(() {
                             _placedTargets[index] = _selectedSentence!;
                             _selectedSentence = null;
@@ -680,10 +835,12 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                             _triggerSuccess();
                           }
                         } else {
+                          SoundService().playWrong();
                           setState(() {
                             _characterFeedback = 'Try a different box! 🤔';
+                            _selectedSentence = null;
                           });
-                          context.read<AppState>().useHeart();
+                          _registerMistake();
                         }
                       } else if (isPlaced) {
                         SoundService().speakEnglish(_placedTargets[index]!);
@@ -748,21 +905,17 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                                         width: 1.5,
                                       ),
                                     ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        const Text('👆 ', style: TextStyle(fontSize: 13)),
-                                        Flexible(
-                                          child: Text(
-                                            isHovered ? 'Drop Here!' : 'Place Card Here!',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w800,
-                                              color: (colors['border'] as Color),
-                                            ),
-                                          ),
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        isHovered ? '👇 Drop!' : '👆 Drop here',
+                                        maxLines: 1,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: (colors['border'] as Color),
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                           ),
@@ -780,7 +933,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
 
         // RIGHT COLUMN: PLAYFUL WOODEN TRAY FOR CARDS
         Expanded(
-          flex: 5,
+          flex: 6,
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -804,9 +957,10 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                 final unplacedTargets = targets.where((t) => !_placedTargets.containsValue(t['sentence'])).toList();
 
                 if (unplacedTargets.isEmpty) {
-                  return const Center(
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text('🎉', style: TextStyle(fontSize: 48)),
                         SizedBox(height: 8),
@@ -824,6 +978,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                 }
 
                 return ListView.separated(
+                  shrinkWrap: true,
                   physics: const BouncingScrollPhysics(),
                   itemCount: unplacedTargets.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
@@ -833,12 +988,17 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                     final isSelected = _selectedSentence == sentence;
                     final cardColor = slotColors[idx % slotColors.length]['border'] as Color;
 
-                    final cardWidget = Container(
+                    // Secili kart belirgin olsun (eskiden secim hic gorunmuyordu)
+                    final cardWidget = AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: isSelected ? const Color(0xFFFFF9C4) : Colors.white,
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: cardColor, width: 2.5),
+                        border: Border.all(
+                          color: isSelected ? Colors.amber.shade800 : cardColor,
+                          width: isSelected ? 3.5 : 2.5,
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: cardColor.withValues(alpha: 0.35),
@@ -932,34 +1092,47 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
       final name = opt['name'] as String;
       final icon = opt['icon'] as String;
 
+      final isCorrect = _correctChoice == name;
+      final isWrong = _wrongChoice == name;
+
       return GestureDetector(
         onTap: () {
-          setState(() {
-            if (name == currentQ['target']) {
-              SoundService().playCorrect();
+          if (_isAdvancing || _isStepCompleted) return;
+          if (name == currentQ['target']) {
+            SoundService().playCorrect();
+            setState(() {
+              _correctChoice = name;
               _characterFeedback = "Great choice! 🎯";
-              if (_currentStepIndex < questions.length - 1) {
-                _currentStepIndex++;
-                Future.delayed(const Duration(milliseconds: 300), () {
-                  if (mounted) _playInitialAudio();
-                });
-              } else {
-                _triggerSuccess();
-              }
-            } else {
-              SoundService().playWrong();
-              _characterFeedback = "Listen again and try another card! 🎧";
-              context.read<AppState>().useHeart();
-            }
-          });
+            });
+            _advanceAfterCorrect(
+              total: questions.length,
+              onNext: () => Future.delayed(const Duration(milliseconds: 250), () {
+                if (mounted) _playInitialAudio();
+              }),
+            );
+          } else {
+            SoundService().playWrong();
+            setState(() => _characterFeedback = "Listen again and try another card! 🎧");
+            _flashWrong(name);
+            _registerMistake();
+          }
         },
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
           width: width,
           height: height,
+          transform: Matrix4.translationValues(isWrong ? 6 : 0, 0, 0),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isCorrect
+                ? const Color(0xFFE8F5E9)
+                : (isWrong ? const Color(0xFFFFEBEE) : Colors.white),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFFECECF2), width: 2),
+            border: Border.all(
+              color: isCorrect
+                  ? const Color(0xFF43A047)
+                  : (isWrong ? const Color(0xFFE53935) : const Color(0xFFECECF2)),
+              width: isCorrect || isWrong ? 3 : 2,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.05),
@@ -1243,7 +1416,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                                 _wrongBalloonIndex = index;
                                 _characterFeedback = "Listen again and choose the right star! ✨";
                               });
-                              context.read<AppState>().useHeart();
+                              _registerMistake();
                               Future.delayed(const Duration(milliseconds: 400), () {
                                 if (mounted) setState(() => _wrongBalloonIndex = null);
                               });
@@ -1358,15 +1531,24 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
         ),
         const SizedBox(height: 16),
 
-        // Cumle dizim yuvasi
-        Container(
+        // Cumle dizim yuvasi (dogruysa yesil, yanlissa kirmizi yanar)
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
           width: double.infinity,
           constraints: const BoxConstraints(minHeight: 70),
           padding: const EdgeInsets.all(12),
+          transform: Matrix4.translationValues(_wrongChoice == 'sentence' ? 6 : 0, 0, 0),
           decoration: BoxDecoration(
-            color: Colors.purple.shade50,
+            color: _correctChoice == 'sentence'
+                ? const Color(0xFFE8F5E9)
+                : (_wrongChoice == 'sentence' ? const Color(0xFFFFEBEE) : Colors.purple.shade50),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.purple.shade300, width: 2),
+            border: Border.all(
+              color: _correctChoice == 'sentence'
+                  ? const Color(0xFF43A047)
+                  : (_wrongChoice == 'sentence' ? const Color(0xFFE53935) : Colors.purple.shade300),
+              width: 2,
+            ),
           ),
           child: Wrap(
             spacing: 8,
@@ -1419,25 +1601,26 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
           text: 'CHECK ANSWER ⭐',
           color: Colors.green,
           shadowColor: Colors.green.shade800,
-          isActive: _builtWords.isNotEmpty,
+          isActive: _builtWords.isNotEmpty && !_isAdvancing,
           onPressed: () {
+            if (_isAdvancing || _isStepCompleted) return;
             final formedSentence = _builtWords.join(' ');
             if (formedSentence == currentItem['correct']) {
+              SoundService().playCorrect();
               SoundService().speakEnglish(formedSentence);
               setState(() {
+                _correctChoice = 'sentence';
                 _characterFeedback = "You made a perfect sentence! 🌟";
-                _builtWords.clear();
-                if (_currentStepIndex < sentences.length - 1) {
-                  _currentStepIndex++;
-                } else {
-                  _triggerSuccess();
-                }
               });
+              _advanceAfterCorrect(
+                total: sentences.length,
+                onNext: () => _builtWords.clear(),
+              );
             } else {
-              setState(() {
-                _characterFeedback = "Try the word order again! 🧩";
-                context.read<AppState>().useHeart();
-              });
+              SoundService().playWrong();
+              setState(() => _characterFeedback = "Try the word order again! 🧩");
+              _flashWrong('sentence');
+              _registerMistake();
             }
           },
         ),
@@ -1786,30 +1969,38 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
 
         Column(
           children: options.map((opt) {
+            final isCorrect = _correctChoice == opt;
+            final isWrong = _wrongChoice == opt;
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
               width: double.infinity,
               child: BouncyButton(
                 text: opt,
-                color: Colors.orange.shade400,
-                shadowColor: Colors.orange.shade700,
+                color: isCorrect
+                    ? Colors.green
+                    : (isWrong ? Colors.red.shade400 : Colors.orange.shade400),
+                shadowColor: isCorrect
+                    ? Colors.green.shade800
+                    : (isWrong ? Colors.red.shade700 : Colors.orange.shade700),
                 isActive: true,
                 onPressed: () {
-                  SoundService().speakEnglish(opt);
-                  setState(() {
-                    if (opt == currentQ['answer']) {
-                      _characterFeedback = "You completed it correctly! 🤔";
-                      SoundService().speakEnglish("Congratulations!");
-                      if (_currentStepIndex < questions.length - 1) {
-                        _currentStepIndex++;
-                      } else {
-                        _triggerSuccess();
-                      }
-                    } else {
-                      _characterFeedback = "Try another word! 🤔";
-                      context.read<AppState>().useHeart();
-                    }
-                  });
+                  if (_isAdvancing || _isStepCompleted) return;
+                  if (opt == currentQ['answer']) {
+                    SoundService().playCorrect();
+                    // Bosluk dolmus haliyle tum cumleyi oku
+                    final full = (currentQ['sentence'] as String).replaceAll('___', opt);
+                    SoundService().speakEnglish(full);
+                    setState(() {
+                      _correctChoice = opt;
+                      _characterFeedback = "You completed it correctly! 🌟";
+                    });
+                    _advanceAfterCorrect(total: questions.length);
+                  } else {
+                    SoundService().playWrong();
+                    setState(() => _characterFeedback = "Try another word! 🤔");
+                    _flashWrong(opt);
+                    _registerMistake();
+                  }
                 },
               ),
             );

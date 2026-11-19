@@ -26,8 +26,15 @@ class StorageService {
   static const String _keyAvatarAccessory = 'kids_talk_avatar_accessory';
   static const String _keyGems = 'kids_talk_gems';
   static const String _keyVip = 'kids_talk_vip';
+  static const String _keyChestOpened = 'kids_talk_chest_opened';
+  static const String _keyListenDate = 'kids_talk_daily_listen_date';
+  static const String _keyHeartsUpdatedAt = 'kids_talk_hearts_updated_at';
 
   SharedPreferences? _prefs;
+
+  /// Testler arasinda onbellegi temizler.
+  @visibleForTesting
+  void resetForTesting() => _prefs = null;
 
   Future<void> init() async {
     try {
@@ -200,5 +207,27 @@ class StorageService {
 
   Future<void> setVip(bool value) async {
     await _prefs?.setBool(_keyVip, value);
+  }
+
+  // --- CAN YENILENME ZAMANI (ms) ---
+  int? getHeartsUpdatedAt() {
+    return _prefs?.getInt(_keyHeartsUpdatedAt);
+  }
+
+  Future<void> saveHeartsUpdatedAt(int ms) async {
+    await _prefs?.setInt(_keyHeartsUpdatedAt, ms);
+  }
+
+  // --- HAZINE SANDIGI / GUNLUK DINLEME GOREVI ---
+  bool isChestOpened() => _prefs?.getBool(_keyChestOpened) ?? false;
+
+  Future<void> setChestOpened(bool v) async {
+    await _prefs?.setBool(_keyChestOpened, v);
+  }
+
+  String? getDailyListenDate() => _prefs?.getString(_keyListenDate);
+
+  Future<void> saveDailyListenDate(String d) async {
+    await _prefs?.setString(_keyListenDate, d);
   }
 }

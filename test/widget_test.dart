@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kids_talk_online/data/curriculum_data.dart';
 import 'package:kids_talk_online/services/sound_service.dart';
+import 'package:kids_talk_online/services/storage_service.dart';
 import 'package:kids_talk_online/state/app_state.dart';
 
 /// AppState yuklenene kadar bekler (constructor async storage okur).
@@ -93,7 +94,11 @@ void main() {
   });
 
   group('AppState', () {
-    setUp(() => SharedPreferences.setMockInitialValues({}));
+    setUp(() {
+      SharedPreferences.resetStatic();
+      SharedPreferences.setMockInitialValues({});
+      StorageService().resetForTesting();
+    });
 
     test('yeni kullanici sifir ilerlemeyle baslar', () async {
       final s = await _loadedState();
@@ -128,6 +133,36 @@ void main() {
       s.setVip(true);
       s.useHeart();
       expect(s.hearts, 4);
+    });
+
+    test('can bitince oynanamaz, elmasla dolar', () async {
+      final s = await _loadedState();
+      for (var i = 0; i < AppState.maxHearts; i++) {
+        s.useHeart();
+      }
+      expect(s.hearts, 0);
+      expect(s.canPlay, isFalse);
+      expect(s.refillHeartsWithGems(), isFalse); // 0 elmas
+
+      // 4 ders x 3 yildiz = 60 elmas
+      for (final a in CurriculumData.getActivitiesByStage('Starter')) {
+        s.completeActivity(a.id, 3);
+      }
+      expect(s.gems, 60);
+      expect(s.refillHeartsWithGems(), isTrue);
+      expect(s.hearts, AppState.maxHearts);
+      expect(s.gems, 60 - AppState.heartRefillCost);
+    });
+
+    test('sandik yildiz hedefine ulasmadan acilmaz, bir kez acilir', () async {
+      final s = await _loadedState();
+      expect(s.openChest(), isFalse);
+      for (final a in CurriculumData.activities.take(7)) {
+        s.completeActivity(a.id, 3); // 21 yildiz
+      }
+      expect(s.canOpenChest, isTrue);
+      expect(s.openChest(), isTrue);
+      expect(s.openChest(), isFalse);
     });
 
     test('ogrenilen kelime ac/kapa', () async {

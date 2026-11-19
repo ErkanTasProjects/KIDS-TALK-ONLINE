@@ -11,14 +11,24 @@ class QuestsScreen extends StatefulWidget {
 }
 
 class _QuestsScreenState extends State<QuestsScreen> {
-  bool _chestOpened = false;
-
   void _openTreasureChest(bool isTurkish) {
-    if (_chestOpened) return;
-    setState(() => _chestOpened = true);
+    final appState = context.read<AppState>();
+    if (appState.isChestOpened) return;
+    if (!appState.canOpenChest) {
+      SoundService().playWrong();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            "🔒 Collect ${AppState.chestStarGoal - appState.totalStars} more stars to open the chest!",
+          ),
+        ),
+      );
+      return;
+    }
+    appState.openChest();
     SoundService().playVictory();
     SoundService().speakEnglish("Treasure chest opened! You earned 50 XP and a Super Star badge!");
-    context.read<AppState>().addXp(50);
 
     showDialog(
       context: context,
@@ -35,7 +45,7 @@ class _QuestsScreenState extends State<QuestsScreen> {
             Text("💎", style: TextStyle(fontSize: 60)),
             SizedBox(height: 12),
             Text(
-              "+50 XP and 'Super Star' Badge Earned!",
+              "+50 XP, +50 💎 and 'Super Star' Badge Earned!",
               textAlign: TextAlign.center,
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
@@ -65,6 +75,7 @@ class _QuestsScreenState extends State<QuestsScreen> {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final isTr = appState.isTurkish;
+    final chestOpened = appState.isChestOpened;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFBF9FE),
@@ -170,10 +181,16 @@ class _QuestsScreenState extends State<QuestsScreen> {
                             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Color(0xFFE65100)),
                           ),
                           Text(
-                            _chestOpened
-                                ? ('OPENED 💎')
-                                : ('READY! ✨'),
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: _chestOpened ? Colors.grey : Colors.green),
+                            chestOpened
+                                ? 'OPENED 💎'
+                                : (appState.canOpenChest ? 'READY! ✨' : 'LOCKED 🔒'),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: chestOpened
+                                  ? Colors.grey
+                                  : (appState.canOpenChest ? Colors.green : Colors.orange),
+                            ),
                           ),
                         ],
                       ),
@@ -191,7 +208,7 @@ class _QuestsScreenState extends State<QuestsScreen> {
                                 border: Border.all(color: Colors.amber.shade600, width: 2),
                               ),
                               child: Center(
-                                child: Text(_chestOpened ? "💎" : "🎁", style: const TextStyle(fontSize: 34)),
+                                child: Text(chestOpened ? "💎" : "🎁", style: const TextStyle(fontSize: 34)),
                               ),
                             ),
                           ),
@@ -208,7 +225,7 @@ class _QuestsScreenState extends State<QuestsScreen> {
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(10),
                                   child: LinearProgressIndicator(
-                                    value: (appState.totalStars / 20).clamp(0.0, 1.0),
+                                    value: (appState.totalStars / AppState.chestStarGoal).clamp(0.0, 1.0),
                                     minHeight: 12,
                                     backgroundColor: Colors.grey.shade200,
                                     valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF9800)),
@@ -216,7 +233,7 @@ class _QuestsScreenState extends State<QuestsScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  "${appState.totalStars} / 20 ${'Stars'}",
+                                  "${appState.totalStars.clamp(0, AppState.chestStarGoal)} / ${AppState.chestStarGoal} Stars",
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade600),
                                 ),
                               ],
@@ -241,8 +258,9 @@ class _QuestsScreenState extends State<QuestsScreen> {
                   icon: "🎧",
                   title: 'Listen to Daily Greeting Word',
                   subtitle: 'Listen and repeat "Hello"',
-                  progress: 1.0,
-                  progressText: "1 / 1",
+                  // Eskiden dinlemeden "1 / 1 tamam" gorunuyordu
+                  progress: appState.listenedToday ? 1.0 : 0.0,
+                  progressText: appState.listenedToday ? "1 / 1" : "0 / 1",
                   actionButton: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.purple.shade50,
@@ -258,6 +276,7 @@ class _QuestsScreenState extends State<QuestsScreen> {
                     ),
                     onPressed: () {
                       SoundService().speakEnglish("Hello! Good morning!");
+                      appState.markListenedToday();
                     },
                   ),
                 ),
@@ -268,8 +287,9 @@ class _QuestsScreenState extends State<QuestsScreen> {
                   icon: "🎈",
                   title: 'Complete 1 Activity',
                   subtitle: 'Earn 3 stars in any lesson',
-                  progress: (appState.currentLevelIndex >= 1 ? 1.0 : 0.0),
-                  progressText: "${appState.currentLevelIndex >= 1 ? '1' : '0'} / 1",
+                  // Basligiyla tutarli: gercekten 3 yildizli bir ders var mi
+                  progress: appState.hasThreeStarLesson ? 1.0 : 0.0,
+                  progressText: appState.hasThreeStarLesson ? "1 / 1" : "0 / 1",
                 ),
                 const SizedBox(height: 10),
 
@@ -279,7 +299,7 @@ class _QuestsScreenState extends State<QuestsScreen> {
                   title: 'Collect 5 Stars',
                   subtitle: 'Finish lessons with excellence',
                   progress: (appState.totalStars / 5).clamp(0.0, 1.0),
-                  progressText: "${appState.totalStars} / 5",
+                  progressText: "${appState.totalStars.clamp(0, 5)} / 5",
                 ),
                 const SizedBox(height: 24),
 
@@ -294,8 +314,8 @@ class _QuestsScreenState extends State<QuestsScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildBadgeCard("🦒", "Gigi", true),
-                    _buildBadgeCard("🐰", "Luna", true),
-                    _buildBadgeCard("🤖", "Bip-Bop", true),
+                    _buildBadgeCard("🐰", "Luna", appState.totalStars >= 1),
+                    _buildBadgeCard("🤖", "Bip-Bop", appState.totalStars >= 3),
                     _buildBadgeCard("🦁", "Leo", appState.totalStars >= 6),
                     _buildBadgeCard("⭐", "Zippy", appState.totalStars >= 9),
                   ],

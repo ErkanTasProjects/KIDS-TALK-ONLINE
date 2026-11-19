@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'screens/welcome_screen.dart';
 import 'services/sound_service.dart';
@@ -7,6 +8,14 @@ import 'state/app_state.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Tum ekranlar acik renkli: durum cubugu simgeleri (saat, pil) koyu olsun
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+  ));
+  // Tum ekranlar dikey tasarlandi; yatayda duzen bozuluyordu
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   // Yerel veritabani ve ses motorunu guvenle hazirla
   await StorageService().init();
   await SoundService().init();

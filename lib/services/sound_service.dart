@@ -321,9 +321,19 @@ class SoundService {
   void playWhoosh() => _playSfx('whoosh.wav');
   void playTap() => _playSfx('tap.wav');
 
-  Future<void> setSpeechRate(double rate) async {
-    // Slider 0.25 - 0.85 araliginda; bunu 0.65x - 1.45x normal konusma hizina esler
-    _currentSpeechRate = (rate * 1.5).clamp(0.5, 2.0);
+  /// Profil ekranindaki kaydiricinin son konumu (ekran her acildiginda
+  /// sifirlanmasin diye burada tutulur). 0.48 = Normal.
+  double speechSliderValue = 0.48;
+
+  Future<void> setSpeechRate(double sliderValue) async {
+    // Kaydirici 0.25 (yavas) - 0.48 (normal) - 0.85 (hizli) -> 0.6x - 1.0x - 1.4x.
+    // Eskiden "rate * 1.5" kullaniliyordu: kaydiricinin alt yarisi hic
+    // fark yaratmiyor, "Normal" konumu gercekte 0.72x caliyordu.
+    speechSliderValue = sliderValue;
+    final v = sliderValue.clamp(0.25, 0.85).toDouble();
+    _currentSpeechRate = v < 0.48
+        ? 1.0 - (0.48 - v) / 0.23 * 0.4
+        : 1.0 + (v - 0.48) / 0.37 * 0.4;
     try {
       await _speechPlayer.setPlaybackRate(_currentSpeechRate);
     } catch (e) {
