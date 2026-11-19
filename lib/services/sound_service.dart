@@ -1,5 +1,6 @@
 ﻿import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 /// Kids Talk Online - Ozel Studyo Ses Motoru
@@ -146,7 +147,42 @@ class SoundService {
   final FlutterTts _tts = FlutterTts();
   bool _ttsReady = false;
 
+  AppLifecycleListener? _lifecycle;
+  bool _bgmWasPlaying = false;
+
+  /// Uygulama arka plana gidince tum sesleri durdurur, geri gelince muzigi
+  /// kaldigi yerden surdurur. (Eskiden uygulamadan cikinca muzik ve konusma
+  /// arkada calmaya devam ediyordu.)
+  void _listenLifecycle() {
+    _lifecycle ??= AppLifecycleListener(
+      onHide: _onAppHidden,
+      onShow: _onAppShown,
+      onDetach: _onAppHidden,
+    );
+  }
+
+  Future<void> _onAppHidden() async {
+    _bgmWasPlaying = _bgmPlayer.state == PlayerState.playing;
+    await _stopSpeech();
+    try {
+      await _sfxPlayer.stop();
+    } catch (_) {}
+    try {
+      await _bgmPlayer.pause();
+    } catch (_) {}
+  }
+
+  Future<void> _onAppShown() async {
+    if (_bgmWasPlaying && isMusicEnabled) {
+      try {
+        await _bgmPlayer.resume();
+      } catch (_) {}
+    }
+    _bgmWasPlaying = false;
+  }
+
   Future<void> init() async {
+    _listenLifecycle();
     try {
       await _speechPlayer.setReleaseMode(ReleaseMode.stop);
       await _sfxPlayer.setReleaseMode(ReleaseMode.stop);
