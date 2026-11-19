@@ -33,6 +33,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
 
   // Surukle & Birak durumu
   final Map<int, String> _placedTargets = {};
+  List<int> _trayOrder = [];
   String? _selectedSentence;
 
   // Harf Cizme durumu
@@ -92,6 +93,16 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     } else {
       _shuffledVisualPairs = [];
       _shuffledEnglishPairs = [];
+    }
+
+    // Surukle-birak kartlari karisik sirada (eskiden her cumle kendi resminin
+    // tam yanindaydi, cevap bastan belliydi)
+    if (widget.activity.gameData['targets'] is List) {
+      final order = List<int>.generate((widget.activity.gameData['targets'] as List).length, (i) => i);
+      do {
+        order.shuffle(Random());
+      } while (order.length > 2 && List.generate(order.length, (i) => order[i] == i).where((x) => x).length > 1);
+      _trayOrder = order;
     }
 
     // Ilk soruyu seslendir
@@ -954,7 +965,10 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
             ),
             child: Builder(
               builder: (context) {
-                final unplacedTargets = targets.where((t) => !_placedTargets.containsValue(t['sentence'])).toList();
+                final ordered = _trayOrder.length == targets.length
+                    ? _trayOrder.map((i) => targets[i]).toList()
+                    : targets;
+                final unplacedTargets = ordered.where((t) => !_placedTargets.containsValue(t['sentence'])).toList();
 
                 if (unplacedTargets.isEmpty) {
                   return const Padding(

@@ -48,16 +48,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 const Text("📊", style: TextStyle(fontSize: 28)),
                 const SizedBox(width: 10),
-                Text(
-                  AppStrings.tr('parent_report_title', isTurkish),
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                // Flexible: uzun baslik sagdan tasiyordu
+                Flexible(
+                  child: Text(
+                    AppStrings.tr('parent_report_title', isTurkish),
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
             _buildReportMetric(
               AppStrings.tr('metric_completion', isTurkish),
-              "%${((appState.totalStars / (CurriculumData.activities.length * 3)) * 100).clamp(0, 100).toInt()}",
+              "${((appState.totalStars / (CurriculumData.activities.length * 3)) * 100).clamp(0, 100).toInt()}%",
               Colors.green,
             ),
             // Gercek veriler (eskiden "%95" ve "32 Words" sabit yaziliydi)
@@ -73,7 +76,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             _buildReportMetric(
               AppStrings.tr('metric_streak', isTurkish),
-              "${appState.streak} ${'Days'}",
+              "${appState.streak} ${appState.streak == 1 ? 'day' : 'days'}",
               Colors.orange,
             ),
             const SizedBox(height: 20),
@@ -111,7 +114,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          Flexible(child: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
