@@ -43,7 +43,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 550),
-            child: Padding(
+            // Kucuk ekranlarda kaydirilabilir, buyuklerde tam ekrana yayilir
+            child: LayoutBuilder(
+              builder: (context, viewport) => SingleChildScrollView(
+              child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: viewport.maxHeight),
+              child: IntrinsicHeight(
+              child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -187,12 +193,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
                           children: [
                             Text("🦒", style: TextStyle(fontSize: 16)),
                             SizedBox(width: 8),
-                            Text(
-                              "\"Let's learn English together! ⭐\"",
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFE65100),
+                            Flexible(
+                              child: Text(
+                                "\"Let's learn English together! ⭐\"",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFE65100),
+                                ),
                               ),
                             ),
                           ],
@@ -255,6 +263,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
                   ),
                 ],
               ),
+            ),
+            ),
+            ),
+            ),
             ),
           ),
         ),

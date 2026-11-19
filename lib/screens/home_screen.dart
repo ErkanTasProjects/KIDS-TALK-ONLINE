@@ -89,7 +89,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               // Corner Logo & Title with Giraffe Emblem
-              Row(
+              Flexible(
+                child: Row(
                 children: [
                   Container(
                     width: 44,
@@ -118,7 +119,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Column(
+                  Flexible(
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
@@ -139,17 +141,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         ),
                       ),
                       const SizedBox(height: 2),
-                      const Text(
-                        "English World",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF2D3748),
+                      const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          "English World",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF2D3748),
+                          ),
                         ),
                       ),
                     ],
                   ),
+                  ),
                 ],
+              ),
               ),
 
               // Sag Kisim: Muzik Butonu + Yuksek Kaliteli Gigi Avatari
@@ -988,12 +995,19 @@ class _DuolingoNodeItem extends StatelessWidget {
             else
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  activity.title,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: isUnlocked ? const Color(0xFF2D3748) : Colors.grey,
+                // Yana kaydirilan (zikzak) dugumlerde uzun baslik ekrandan cikmasin
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 170),
+                  child: Text(
+                    activity.title,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: isUnlocked ? const Color(0xFF2D3748) : Colors.grey,
+                    ),
                   ),
                 ),
               ),

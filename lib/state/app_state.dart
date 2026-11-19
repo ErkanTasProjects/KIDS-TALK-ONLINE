@@ -1,24 +1,26 @@
 import 'package:flutter/material.dart';
+import '../data/curriculum_data.dart';
 import '../services/storage_service.dart';
 
 class AppState extends ChangeNotifier {
   final StorageService _storage = StorageService();
 
-  // Kullanici Istatistikleri
-  int _xp = 45;
+  // Kullanici Istatistikleri (yeni kullanici sifirdan baslar)
+  int _xp = 0;
   int _hearts = 5;
   int _streak = 1;
-  int _gems = 128;
+  int _gems = 0;
   int _currentLevelIndex = 0;
   String _currentStage = 'Starter';
   String _userName = 'Star Explorer';
   String _avatarAnimal = 'giraffe';
   int _avatarColor = 0xFFFF8A65;
   String _avatarAccessory = 'crown';
-  Map<String, int> _activityStars = {'starter_1_2': 3};
-  List<String> _learnedWords = ['Hello', 'Morning', 'Cat', 'Apple', 'Book'];
+  Map<String, int> _activityStars = {};
+  List<String> _learnedWords = [];
   bool _isSoundEnabled = true;
   bool _isMusicEnabled = true;
+  bool _isVip = false;
   String _language = 'en'; // 'en' (default 100% English) or 'tr' (optional in parent settings)
 
   bool _isLoaded = false;
@@ -39,6 +41,9 @@ class AppState extends ChangeNotifier {
   bool get isSoundEnabled => _isSoundEnabled;
   bool get isMusicEnabled => _isMusicEnabled;
   String get language => _language;
+  bool get isVip => _isVip;
+  // Uygulama su an %100 Ingilizce; Turkce arayuz metinleri kaldirildi.
+  // Dil ayari ileride veli paneli icin saklaniyor.
   bool get isTurkish => false;
 
   int get totalStars => _activityStars.values.fold(0, (a, b) => a + b);
@@ -64,6 +69,7 @@ class AppState extends ChangeNotifier {
     _isSoundEnabled = _storage.isSoundEnabled();
     _isMusicEnabled = _storage.isMusicEnabled();
     _language = _storage.getLanguage();
+    _isVip = _storage.isVip();
 
     _checkStreak();
 
@@ -74,6 +80,11 @@ class AppState extends ChangeNotifier {
   // Seri Kontrolu (Gunde bir kez kontrol)
   void _checkStreak() {
     final now = DateTime.now();
+    // Gun farki takvim gunu olarak hesaplanir. Eskiden saatli "now" ile
+    // gece yarisi tarihi karsilastirildigindan, dun aksam girip bugun
+    // sabah girildiginde fark 0 ya da yaz saati kaymasiyla yanlis cikabiliyordu.
+    // UTC kullanmak yaz saati (DST) kaymasini da onler.
+    final today = DateTime.utc(now.year, now.month, now.day);
     final todayStr = "${now.year}-${now.month}-${now.day}";
     final lastActiveStr = _storage.getLastActiveDate();
 
@@ -82,8 +93,8 @@ class AppState extends ChangeNotifier {
     } else if (lastActiveStr != todayStr) {
       try {
         final parts = lastActiveStr.split('-').map(int.parse).toList();
-        final lastDate = DateTime(parts[0], parts[1], parts[2]);
-        final difference = now.difference(lastDate).inDays;
+        final lastDate = DateTime.utc(parts[0], parts[1], parts[2]);
+        final difference = today.difference(lastDate).inDays;
 
         if (difference == 1) {
           _streak += 1;
@@ -117,6 +128,7 @@ class AppState extends ChangeNotifier {
 
   // Can Dusurme (Yanlis cevap)
   void useHeart() {
+    if (_isVip) return; // Star Club: sinirsiz can
     if (_hearts > 0) {
       _hearts--;
       _storage.saveHearts(_hearts);
@@ -149,6 +161,17 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // Kelime Kasasi: ogrendim isaretini ac/kapa
+  void toggleLearnedWord(String word) {
+    if (_learnedWords.contains(word)) {
+      _learnedWords.remove(word);
+    } else {
+      _learnedWords.add(word);
+    }
+    _storage.saveLearnedWords(_learnedWords);
+    notifyListeners();
+  }
+
   // Ses & Muzik Ac / Kapa
   void toggleSound() {
     _isSoundEnabled = !_isSoundEnabled;
@@ -179,13 +202,26 @@ class AppState extends ChangeNotifier {
       _storage.saveActivityStars(_activityStars);
     }
 
-    // Siradaki bolume gecis
-    _currentLevelIndex++;
-    _storage.saveCurrentLevelIndex(_currentLevelIndex);
+    // Siradaki bolume gecis: sadece su anki (en son acik) Starter dersi
+    // bitirildiginde. Eskiden eski bir dersi tekrar oynamak da yeni ders
+    // aciyordu (ayni dersi 4 kez oynayan Movers'i aciyordu).
+    final starter = CurriculumData.getActivitiesByStage('Starter');
+    final idx = starter.indexWhere((a) => a.id == activityId);
+    if (idx != -1 && idx == _currentLevelIndex) {
+      _currentLevelIndex++;
+      _storage.saveCurrentLevelIndex(_currentLevelIndex);
+    }
 
-    // Yildiz basina XP odulu (1 yildiz = 15 XP, 3 yildiz = 45 XP)
+    // Yildiz basina XP ve elmas odulu (1 yildiz = 15 XP + 5 elmas)
+    _gems += 5 * stars;
+    _storage.saveGems(_gems);
     addXp(15 * stars);
+  }
 
+  // VIP (Star Club) uyeligi
+  void setVip(bool value) {
+    _isVip = value;
+    _storage.setVip(value);
     notifyListeners();
   }
 

@@ -238,10 +238,9 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
               // Maskot Rehberlik Baloncugu (Gigi)
               CharacterDialogueBox(
                 characterName: widget.activity.characterName,
+                // Not: CharacterDialogueBox mesaji zaten kendisi okuyor;
+                // burada tekrar okutmak sesi bastan baslatip kesiyordu.
                 message: _characterFeedback,
-                onCharacterTap: () {
-                  SoundService().speakEnglish(_characterFeedback);
-                },
               ),
 
               // Ana Oyun Alani
@@ -275,6 +274,22 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
     );
   }
 
+  /// Kucuk telefonlarda icerik ekrandan tasmasin diye: alan yeterliyse
+  /// tam yukseklikte (Spacer/Expanded calisir), yetmiyorsa kaydirilabilir.
+  Widget _fitScroll(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: IntrinsicHeight(child: child),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildActivityGame() {
     switch (widget.activity.activityType) {
       case 'matching':
@@ -285,21 +300,21 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
       case 'trace':
         return _buildTraceGame();
       case 'listen_choose':
-        return _buildListenChooseGame();
+        return _fitScroll(_buildListenChooseGame());
       case 'balloon_pop':
-        return _buildBalloonPopGame();
+        return _fitScroll(_buildBalloonPopGame());
       case 'sentence_builder':
-        return _buildSentenceBuilderGame();
+        return _fitScroll(_buildSentenceBuilderGame());
       case 'memory':
         return _buildMemoryGame();
       case 'hidden_object':
-        return _buildHiddenObjectGame();
+        return _fitScroll(_buildHiddenObjectGame());
       case 'fill_blank':
-        return _buildFillBlankGame();
+        return _fitScroll(_buildFillBlankGame());
       case 'speak_record':
-        return _buildSpeakRecordGame();
+        return _fitScroll(_buildSpeakRecordGame());
       case 'count_feed':
-        return _buildCountFeedGame();
+        return _fitScroll(_buildCountFeedGame());
       case 'color_train':
         return _buildColorTrainGame();
       default:
@@ -906,7 +921,14 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
       () => List<dynamic>.from(currentQ['options'] as List<dynamic>)..shuffle(Random()),
     );
 
-    Widget buildOptionCard(dynamic opt, {double width = 145, double height = 135}) {
+    // Kart boyutu ekran genisligine gore (dar telefonlarda yan yana 2 kart sigsin)
+    final double screenW = MediaQuery.sizeOf(context).width.clamp(0.0, 600.0).toDouble();
+    final double cardW = ((screenW - 32 - 16) / 2).clamp(110.0, 145.0).toDouble();
+    final double cardH = cardW * 0.93;
+
+    Widget buildOptionCard(dynamic opt) {
+      final width = cardW;
+      final height = cardH;
       final name = opt['name'] as String;
       final icon = opt['icon'] as String;
 
@@ -946,27 +968,31 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
               ),
             ],
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(icon, style: const TextStyle(fontSize: 48)),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3E0),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF3E2723),
+          padding: const EdgeInsets.all(8),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(icon, style: const TextStyle(fontSize: 48)),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF3E0),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF3E2723),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -1223,8 +1249,11 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                               });
                             }
                           },
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    child: Center(
+                      child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
                           width: 86,
@@ -1278,6 +1307,8 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                         ),
                       ],
                     ),
+                    ),
+                    ),
                   ),
                 ),
               );
@@ -1316,9 +1347,11 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
             children: [
               Text(currentItem['icon'] ?? '🧩', style: const TextStyle(fontSize: 28)),
               const SizedBox(width: 10),
-              const Text(
-                "Build the sentence! 🧩",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF4A148C)),
+              const Flexible(
+                child: Text(
+                  "Build the sentence! 🧩",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF4A148C)),
+                ),
               ),
             ],
           ),
@@ -1445,15 +1478,15 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
             ),
             child: GestureDetector(
               onPanStart: (details) {
-                final RenderBox renderBox = context.findRenderObject() as RenderBox;
-                final localPos = renderBox.globalToLocal(details.globalPosition);
+                // Konum cizim alanina gore (eskiden tum ekrana gore aliniyordu,
+                // cizgi parmagin altinda degil kaymis gorunuyordu)
+                final localPos = details.localPosition;
                 setState(() {
                   _tracePoints.add(localPos);
                 });
               },
               onPanUpdate: (details) {
-                final RenderBox renderBox = context.findRenderObject() as RenderBox;
-                final localPos = renderBox.globalToLocal(details.globalPosition);
+                final localPos = details.localPosition;
                 setState(() {
                   _tracePoints.add(localPos);
 
@@ -1484,16 +1517,20 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
               onPanEnd: (details) {
                 _tracePoints.add(null);
               },
+              behavior: HitTestBehavior.opaque,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  Text(
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
                     currentLetterItem['letter'],
                     style: TextStyle(
                       fontSize: 160,
                       fontWeight: FontWeight.w900,
                       color: _isLetterCompleted ? Colors.green.shade400 : Colors.grey.shade200,
                     ),
+                  ),
                   ),
                   CustomPaint(
                     painter: _DrawingPainter(points: _tracePoints),
@@ -1629,9 +1666,11 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
             children: [
               Text("🤔", style: TextStyle(fontSize: 18)),
               SizedBox(width: 8),
-              Text(
-                "Tap the items to discover and listen!",
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF4A148C)),
+              Flexible(
+                child: Text(
+                  "Tap the items to discover and listen!",
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF4A148C)),
+                ),
               ),
             ],
           ),
@@ -1925,7 +1964,8 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
             children: [
               Text(itemIcon, style: const TextStyle(fontSize: 34)),
               const SizedBox(width: 12),
-              Column(
+              Flexible(
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -1946,6 +1986,7 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                   ),
                 ],
               ),
+              ),
             ],
           ),
         ),
@@ -1962,7 +2003,9 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
               final isHovered = candidateData.isNotEmpty;
 
               return Center(
-                child: AnimatedContainer(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -2011,13 +2054,15 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
                     ],
                   ),
                 ),
+                ),
               );
             },
           ),
         ),
 
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          alignment: WrapAlignment.center,
+          runSpacing: 6,
           children: List.generate(targetNumber, (index) {
             final isFed = index < _fedCount;
             return Container(
@@ -2137,8 +2182,8 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
 
       if (_fedCount == targetNumber) {
         Future.delayed(const Duration(milliseconds: 600), () {
+          if (!mounted) return;
           _triggerSuccess();
-          SoundService().playVictory();
         });
       }
     });
@@ -2358,8 +2403,8 @@ class _LessonScreenState extends State<LessonScreen> with TickerProviderStateMix
 
       if (_placedTrainCars.length == total) {
         Future.delayed(const Duration(milliseconds: 600), () {
+          if (!mounted) return;
           _triggerSuccess();
-          SoundService().speakEnglish('All aboard! The train is ready to go!');
         });
       }
     });

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/sound_service.dart';
+import '../state/app_state.dart';
 
 class VocabularyItem {
   final String english;
@@ -26,7 +28,6 @@ class VocabularyScreen extends StatefulWidget {
 
 class _VocabularyScreenState extends State<VocabularyScreen> {
   String _selectedCategory = 'All';
-  final Set<String> _learnedWords = {'Hello', 'Good morning', 'Mother', 'Book', 'One'};
 
   final List<String> _categories = [
     'All',
@@ -81,6 +82,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final filteredList = _selectedCategory == 'All'
         ? _vocabList
         : _vocabList.where((item) => item.category == _selectedCategory).toList();
+    // Ogrenilen kelimeler artik AppState'te kalici (eskiden ekrana gomulu sabit listeydi)
+    final appState = context.watch<AppState>();
+    final learned = appState.learnedWords.toSet();
 
     return Scaffold(
       backgroundColor: const Color(0xFFFBF9FE),
@@ -96,7 +100,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
+                      Flexible(
+                        child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Container(
@@ -117,12 +122,17 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          const Text(
-                            "Visual Word Cards",
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF263238)),
+                          const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              "Visual Word Cards",
+                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF263238)),
+                            ),
                           ),
                         ],
                       ),
+                      ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
@@ -135,7 +145,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                             const Icon(Icons.stars_rounded, color: Colors.amber, size: 20),
                             const SizedBox(width: 4),
                             Text(
-                              "${_learnedWords.length} / ${_vocabList.length} Mastered",
+                              "${_vocabList.where((v) => learned.contains(v.english)).length} / ${_vocabList.length} Mastered",
                               style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFE65100), fontSize: 12),
                             ),
                           ],
@@ -204,7 +214,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final item = filteredList[index];
-                      final isLearned = _learnedWords.contains(item.english);
+                      final isLearned = learned.contains(item.english);
 
                       return Container(
                         padding: const EdgeInsets.all(12),
@@ -258,7 +268,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                                   const SizedBox(height: 2),
                                   Row(
                                     children: [
-                                      Container(
+                                      Flexible(
+                                        child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                                         decoration: BoxDecoration(
                                           color: Colors.amber.shade50,
@@ -267,12 +278,15 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                                         ),
                                         child: Text(
                                           item.meaningLabel,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
                                             color: Colors.brown.shade700,
                                           ),
                                         ),
+                                      ),
                                       ),
                                       if (item.phonetic.isNotEmpty) ...[
                                         const SizedBox(width: 6),
@@ -316,13 +330,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                             GestureDetector(
                               onTap: () {
                                 SoundService().playCorrect();
-                                setState(() {
-                                  if (isLearned) {
-                                    _learnedWords.remove(item.english);
-                                  } else {
-                                    _learnedWords.add(item.english);
-                                  }
-                                });
+                                appState.toggleLearnedWord(item.english);
                               },
                               child: Container(
                                 padding: const EdgeInsets.all(10),

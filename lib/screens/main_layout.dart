@@ -73,7 +73,7 @@ class _MainLayoutState extends State<MainLayout> {
     final isTurkish = context.watch<AppState>().isTurkish;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -105,13 +105,17 @@ class _MainLayoutState extends State<MainLayout> {
   Widget _buildNavItem(int index, IconData icon, String label, Color activeColor) {
     final isSelected = _selectedIndex == index;
 
-    return GestureDetector(
+    // Expanded: 5 sekme her zaman ekran genisligine sigar (eskiden dar
+    // telefonlarda alt menu sagdan tasiyordu)
+    return Expanded(
+      child: GestureDetector(
       onTap: () => _onItemTapped(index),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutBack,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? activeColor.withValues(alpha: 0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
@@ -133,16 +137,21 @@ class _MainLayoutState extends State<MainLayout> {
               ),
             ),
             const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
-                color: isSelected ? activeColor : Colors.grey.shade500,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
+                  color: isSelected ? activeColor : Colors.grey.shade500,
+                ),
               ),
             ),
           ],
         ),
+      ),
       ),
     );
   }

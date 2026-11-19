@@ -25,6 +25,7 @@ class StorageService {
   static const String _keyAvatarColor = 'kids_talk_avatar_color';
   static const String _keyAvatarAccessory = 'kids_talk_avatar_accessory';
   static const String _keyGems = 'kids_talk_gems';
+  static const String _keyVip = 'kids_talk_vip';
 
   SharedPreferences? _prefs;
 
@@ -39,7 +40,7 @@ class StorageService {
 
   // --- XP ---
   int getXp() {
-    return _prefs?.getInt(_keyXp) ?? 45;
+    return _prefs?.getInt(_keyXp) ?? 0;
   }
 
   Future<void> saveXp(int xp) async {
@@ -102,7 +103,7 @@ class StorageService {
     } catch (e) {
       debugPrint("Yıldızlar okunurken hata: $e");
     }
-    return {'starter_1_2': 3}; // Varsayılan ilk başlangıç seviyesi
+    return {}; // Yeni kullanici: henuz yildiz yok
   }
 
   Future<void> saveActivityStars(Map<String, int> stars) async {
@@ -116,7 +117,7 @@ class StorageService {
 
   // --- OGRENILEN KELIMELER ---
   List<String> getLearnedWords() {
-    return _prefs?.getStringList(_keyLearnedWords) ?? ['Hello', 'Morning', 'Cat', 'Apple', 'Book'];
+    return _prefs?.getStringList(_keyLearnedWords) ?? <String>[];
   }
 
   Future<void> saveLearnedWords(List<String> words) async {
@@ -185,10 +186,19 @@ class StorageService {
 
   // --- ELMASLAR (Gems) ---
   int getGems() {
-    return _prefs?.getInt(_keyGems) ?? 128;
+    return _prefs?.getInt(_keyGems) ?? 0;
   }
 
   Future<void> saveGems(int gems) async {
     await _prefs?.setInt(_keyGems, gems);
+  }
+
+  // --- VIP (Star Club) ---
+  bool isVip() {
+    return _prefs?.getBool(_keyVip) ?? false;
+  }
+
+  Future<void> setVip(bool value) async {
+    await _prefs?.setBool(_keyVip, value);
   }
 }

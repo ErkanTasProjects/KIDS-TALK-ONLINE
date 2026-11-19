@@ -341,6 +341,8 @@ class CharacterDialogueBox extends StatelessWidget {
                       Expanded(
                         child: Text(
                           message.isNotEmpty ? message : "Let's learn English together! 🦒✨",
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w800,

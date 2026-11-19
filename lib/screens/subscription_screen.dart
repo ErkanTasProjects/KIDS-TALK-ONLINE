@@ -1,5 +1,8 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/sound_service.dart';
+import '../state/app_state.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -11,28 +14,98 @@ class SubscriptionScreen extends StatefulWidget {
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
   bool _isAnnual = true;
 
-  void _showPurchaseDialog() {
-    SoundService().playVictory();
-    showDialog(
+  /// Ebeveyn Kilidi: cocuklarin kendi basina abonelik baslatmasini engeller
+  /// (Google Play "Families" ve App Store "Kids" kategorisi gereksinimi).
+  /// Cocugun cozemeyecegi bir carpma sorusu sorulur.
+  Future<bool> _showParentGate() async {
+    final rnd = Random();
+    final a = 6 + rnd.nextInt(7); // 6-12
+    final b = 3 + rnd.nextInt(7); // 3-9
+    final correct = a * b;
+    final options = <int>{correct};
+    while (options.length < 3) {
+      final delta = (rnd.nextInt(5) + 1) * (rnd.nextBool() ? 1 : -1);
+      final candidate = correct + delta * (rnd.nextBool() ? 1 : a);
+      if (candidate > 0) options.add(candidate);
+    }
+    final shuffled = options.toList()..shuffle(rnd);
+
+    final passed = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text("🌟 Star Club", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text("🛡️ Parent Gate", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
-            Text("🛡️ Parent Gate", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            SizedBox(height: 10),
-            Text(
-              "Start your 7-day free trial. You can cancel anytime from Google Play / App Store with one tap.",
+          children: [
+            const Text(
+              "Grown-ups only! Please solve this to continue.",
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              "$a × $b = ?",
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF4A148C)),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              alignment: WrapAlignment.center,
+              children: shuffled
+                  .map((n) => ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple.shade50,
+                          foregroundColor: const Color(0xFF4A148C),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: () => Navigator.of(ctx).pop(n == correct),
+                        child: Text("$n", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                      ))
+                  .toList(),
             ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text("CANCEL"),
+          ),
+        ],
+      ),
+    );
+    return passed ?? false;
+  }
+
+  Future<void> _showPurchaseDialog() async {
+    final ok = await _showParentGate();
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please ask a grown-up to help you. 🙂"),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text("🌟 Star Club", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Text(
+          "Start your 7-day free trial (${_isAnnual ? "Annual plan" : "Monthly plan"}). "
+          "You can cancel anytime from Google Play / App Store.",
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 13, color: Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text("CANCEL"),
           ),
           ElevatedButton(
@@ -41,24 +114,30 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("🎉 Hooray! Your 7-Day Free Trial Has Started!"),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
+            onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text("START FREE ⭐", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+
+    // TODO(odeme): Gercek tahsilat icin in_app_purchase / RevenueCat entegrasyonu
+    // gerekli. Simdilik deneme uyeligi cihazda yerel olarak acilir.
+    context.read<AppState>().setVip(true);
+    SoundService().playVictory();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("🎉 Hooray! Your 7-Day Free Trial Has Started!"),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isVip = context.watch<AppState>().isVip;
+
     return Scaffold(
       backgroundColor: const Color(0xFFFBF9FE),
       body: SafeArea(
@@ -178,15 +257,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                     color: _isAnnual ? Colors.amber : Colors.transparent,
                                     borderRadius: BorderRadius.circular(16),
                                   ),
+                                  // FittedBox: dar ekranda yarim genislige sigmayan metin tasmasin
                                   child: const Center(
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          "Annual (50% OFF) 🎁",
-                                          style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black87),
-                                        ),
-                                      ],
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        "Annual (50% OFF) 🎁",
+                                        style: TextStyle(fontWeight: FontWeight.w900, color: Colors.black87),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -252,10 +330,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                             elevation: 4,
                           ),
-                          onPressed: _showPurchaseDialog,
-                          child: const Text(
-                            "START 7-DAY FREE TRIAL 🚀",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                          onPressed: isVip ? null : _showPurchaseDialog,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              isVip ? "STAR CLUB ACTIVE ✅" : "START 7-DAY FREE TRIAL 🚀",
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                            ),
                           ),
                         ),
                       ),

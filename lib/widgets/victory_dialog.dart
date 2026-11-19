@@ -118,7 +118,9 @@ class _VictoryCelebrationDialogState extends State<VictoryCelebrationDialog>
               ),
             ],
           ),
-          child: Column(
+          // Kucuk/yatay ekranlarda diyalog tasmasin
+          child: SingleChildScrollView(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Ustte Ziplayan Maskot
@@ -216,6 +218,7 @@ class _VictoryCelebrationDialogState extends State<VictoryCelebrationDialog>
                 ),
               ),
             ],
+          ),
           ),
         ),
       ),

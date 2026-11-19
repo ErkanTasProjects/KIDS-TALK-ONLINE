@@ -1,9 +1,10 @@
 ﻿import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 /// Kids Talk Online - Ozel Studyo Ses Motoru
-/// Tum sesler YALNIZCA ElevenLabs (Marie) studyo kayitlarindan calar.
-/// Sistem cihazinin robotik TTS motoru ve harici tum yabanci sesler tamamen engellenmistir.
+/// Oncelik ElevenLabs (Marie) studyo kayitlarinda; kaydi olmayan metinler
+/// cihazin TTS motoruyla okunur ki hicbir soru sessiz kalmasin.
 class SoundService {
   static final SoundService _instance = SoundService._internal();
   factory SoundService() => _instance;
@@ -17,7 +18,7 @@ class SoundService {
   bool isMusicEnabled = true;
 
   // ElevenLabs (Marie - Young & Optimistic) ozel studyo ses haritasi
-  final Map<String, String> _voicePack = {
+  static final Map<String, String> _voicePack = {
     // 1. Karakter & Replikler
     "hello! i am gigi! let's explore new english adventures!": "gigi_intro.mp3",
     "hello! i am gigi the giraffe! let's explore english together!": "gigi_intro.mp3",
@@ -142,16 +143,79 @@ class SoundService {
     "super": "super.mp3",
   };
 
+  final FlutterTts _tts = FlutterTts();
+  bool _ttsReady = false;
+
   Future<void> init() async {
     try {
       await _speechPlayer.setReleaseMode(ReleaseMode.stop);
       await _sfxPlayer.setReleaseMode(ReleaseMode.stop);
       await _bgmPlayer.setReleaseMode(ReleaseMode.loop);
       await _bgmPlayer.setVolume(0.25);
+      // Android'de varsayilan "gain" odagi, bir oynatici baslayinca digerini
+      // susturuyordu (efekt sesi soruyu kesiyor, konusma muzigi durduruyordu).
+      // Tum oynaticilar birlikte calabilsin:
+      final ctx = AudioContextConfig(focus: AudioContextConfigFocus.mixWithOthers).build();
+      await AudioPlayer.global.setAudioContext(ctx);
+      for (final p in [_speechPlayer, _sfxPlayer, _bgmPlayer]) {
+        await p.setAudioContext(ctx);
+      }
     } catch (e) {
       debugPrint("SoundService init error: $e");
     }
+    await _initTts();
   }
+
+  /// Studyo kaydi olmayan cumleler icin yedek ses motoru (cihaz TTS).
+  /// Boylece hicbir soru sessiz kalmaz.
+  Future<void> _initTts() async {
+    try {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+        await _tts.setSharedInstance(true);
+        await _tts.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback,
+          [
+            IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+            IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+          ],
+        );
+      }
+      await _tts.setLanguage('en-US');
+      await _tts.setSpeechRate(0.42);
+      await _tts.setPitch(1.15);
+      await _tts.setVolume(1.0);
+      await _tts.awaitSpeakCompletion(false);
+      _ttsReady = true;
+    } catch (e) {
+      debugPrint("TTS init error: $e");
+    }
+  }
+
+  /// Metin icin birebir studyo kaydi varsa dosya adini, yoksa null dondurur.
+  /// (Kelime kelime "tahmin" yapilmaz; yanlis ses calmaktansa TTS okunur.)
+  @visibleForTesting
+  static String? studioFileFor(String text) =>
+      _voicePack[text.trim().toLowerCase()] ?? _voicePack[_normalize(text)];
+
+  @visibleForTesting
+  static Iterable<String> get studioFiles => _voicePack.values.toSet();
+
+  /// Metni ses dosyasi anahtarina cevirir: "This is my bag." -> "this is my bag"
+  static String _normalize(String text) => text
+      .trim()
+      .toLowerCase()
+      .replaceAll('’', "'")
+      .replaceAll(RegExp(r"[^\w\s']"), '')
+      .replaceAll("'", '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  /// Emoji ve sembolleri TTS'ten once temizler (cihaz emojileri okumaya calismasin).
+  static String _cleanForTts(String text) => text
+      .replaceAll(RegExp(r'[^\x20-\x7E’]'), ' ')
+      .replaceAll('___', ' blank ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 
   void setAudioSettings({required bool soundEnabled, required bool musicEnabled}) {
     isSoundEnabled = soundEnabled;
@@ -184,36 +248,54 @@ class SoundService {
 
   double _currentSpeechRate = 1.0;
 
-  /// Sadece ve sadece ElevenLabs studyo kayitlarini calar.
+  /// Once ElevenLabs studyo kaydini calar; birebir kayit yoksa cihaz TTS ile okur.
+  /// (Eskiden kayit bulunamayan sorular tamamen sessiz kaliyordu, kelime
+  /// eslestirmesi de yanlis ses caliyordu: "How's it going?" -> "how".)
   Future<void> speakEnglish(String text, {bool slow = false}) async {
     if (!isSoundEnabled || text.trim().isEmpty) return;
 
-    final normalized = text.trim().toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '');
-    final direct = text.trim().toLowerCase();
+    final audio = studioFileFor(text);
 
-    String? audio = _voicePack[direct] ?? _voicePack[normalized];
-
-    // Cumle icinden anahtar kelime eslesmesi (orn: "One! Delicious Apples!" -> "one")
-    if (audio == null) {
-      final words = normalized.split(' ');
-      for (final w in words) {
-        if (_voicePack.containsKey(w)) {
-          audio = _voicePack[w];
-          break;
-        }
-      }
-    }
+    await _stopSpeech();
 
     if (audio != null) {
       try {
-        await _speechPlayer.stop();
-        final effectiveRate = slow ? 0.75 : _currentSpeechRate;
-        await _speechPlayer.setPlaybackRate(effectiveRate);
         await _speechPlayer.play(AssetSource('sounds/speech/$audio'));
+        // Her seferinde ayarla: yavas oynatmadan sonra hiz 0.75'te kalmasin
+        final effectiveRate = slow ? 0.75 : _currentSpeechRate;
+        try {
+          await _speechPlayer.setPlaybackRate(effectiveRate);
+        } catch (_) {}
+        return;
       } catch (e) {
-        debugPrint("Studio audio play error ($audio): $e");
+        debugPrint("Studio audio play error ($audio): $e -> TTS fallback");
       }
     }
+
+    await _speakTts(text, slow: slow);
+  }
+
+  Future<void> _speakTts(String text, {bool slow = false}) async {
+    if (!_ttsReady) await _initTts();
+    final clean = _cleanForTts(text);
+    if (clean.isEmpty) return;
+    try {
+      // _currentSpeechRate 0.5-2.0 araliginda -> TTS 0.25-0.6
+      final double rate = slow ? 0.28 : (0.42 * _currentSpeechRate).clamp(0.25, 0.6).toDouble();
+      await _tts.setSpeechRate(rate);
+      await _tts.speak(clean);
+    } catch (e) {
+      debugPrint("TTS speak error: $e");
+    }
+  }
+
+  Future<void> _stopSpeech() async {
+    try {
+      await _speechPlayer.stop();
+    } catch (_) {}
+    try {
+      await _tts.stop();
+    } catch (_) {}
   }
 
   Future<void> speakEnglishSlow(String text) async {
@@ -251,8 +333,8 @@ class SoundService {
   Future<void> setPitch(double pitch) async {}
 
   Future<void> stop() async {
+    await _stopSpeech();
     try {
-      await _speechPlayer.stop();
       await _sfxPlayer.stop();
     } catch (_) {}
   }
