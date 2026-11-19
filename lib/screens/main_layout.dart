@@ -10,14 +10,15 @@ import 'subscription_screen.dart';
 import 'vocabulary_screen.dart';
 
 class MainLayout extends StatefulWidget {
-  const MainLayout({super.key});
+  final int initialIndex;
+  const MainLayout({super.key, this.initialIndex = 0});
 
   @override
   State<MainLayout> createState() => _MainLayoutState();
 }
 
 class _MainLayoutState extends State<MainLayout> {
-  int _selectedIndex = 0;
+  late int _selectedIndex = widget.initialIndex;
 
   @override
   void initState() {
@@ -49,7 +50,7 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFBF9FE),
+      backgroundColor: Colors.white,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 650),
@@ -79,86 +80,70 @@ class _MainLayoutState extends State<MainLayout> {
   Widget _buildBottomNav() {
     final isTurkish = context.watch<AppState>().isTurkish;
 
+    // Simgeli, yazisiz alt menu: secili sekme renkli yuvarlak kutu icinde.
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-      decoration: BoxDecoration(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+      decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(top: BorderSide(color: Colors.purple.shade50, width: 2)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.purple.withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, -6),
-          ),
-        ],
+        border: Border(top: BorderSide(color: Color(0xFFE7E9F2), width: 2)),
       ),
       child: SafeArea(
         top: false,
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(0, Icons.map_rounded, AppStrings.tr('nav_map', isTurkish), const Color(0xFF2E7D32)),
-            _buildNavItem(1, Icons.emoji_events_rounded, AppStrings.tr('nav_quests', isTurkish), const Color(0xFFE65100)),
-            _buildNavItem(2, Icons.menu_book_rounded, AppStrings.tr('nav_words', isTurkish), const Color(0xFF0288D1)),
-            _buildNavItem(3, Icons.stars_rounded, AppStrings.tr('nav_club', isTurkish), const Color(0xFF8E24AA)),
-            _buildNavItem(4, Icons.person_rounded, AppStrings.tr('nav_profile', isTurkish), const Color(0xFF512DA8)),
+            _buildNavItem(0, '🗺️', AppStrings.tr('nav_map', isTurkish), const Color(0xFF14B8A6)),
+            _buildNavItem(1, '🎯', AppStrings.tr('nav_quests', isTurkish), const Color(0xFFFF8A00)),
+            _buildNavItem(2, '📚', AppStrings.tr('nav_words', isTurkish), const Color(0xFF1CB0F6)),
+            _buildNavItem(3, '👑', AppStrings.tr('nav_club', isTurkish), const Color(0xFF8B5CF6)),
+            _buildNavItem(4, '🦒', AppStrings.tr('nav_profile', isTurkish), const Color(0xFFFF4B6E)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, String label, Color activeColor) {
+  Widget _buildNavItem(int index, String emoji, String label, Color activeColor) {
     final isSelected = _selectedIndex == index;
 
-    // Expanded: 5 sekme her zaman ekran genisligine sigar (eskiden dar
-    // telefonlarda alt menu sagdan tasiyordu)
     return Expanded(
-      child: GestureDetector(
-      onTap: () => _onItemTapped(index),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutBack,
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? activeColor.withValues(alpha: 0.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: isSelected
-              ? Border.all(color: activeColor.withValues(alpha: 0.3), width: 1.5)
-              : null,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedScale(
-              scale: isSelected ? 1.15 : 1.0,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutBack,
-              child: Icon(
-                icon,
-                size: 24,
-                color: isSelected ? activeColor : Colors.grey.shade400,
-              ),
-            ),
-            const SizedBox(height: 3),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                label,
-                maxLines: 1,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold,
-                  color: isSelected ? activeColor : Colors.grey.shade500,
+      child: Semantics(
+        label: label,
+        button: true,
+        selected: isSelected,
+        child: Tooltip(
+          message: label,
+          child: GestureDetector(
+            onTap: () => _onItemTapped(index),
+            behavior: HitTestBehavior.opaque,
+            child: Center(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                width: 58,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: isSelected ? activeColor.withValues(alpha: 0.12) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isSelected ? activeColor.withValues(alpha: 0.6) : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: AnimatedScale(
+                    scale: isSelected ? 1.12 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutBack,
+                    child: Opacity(
+                      opacity: isSelected ? 1 : 0.85,
+                      child: Text(emoji, style: const TextStyle(fontSize: 27)),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ],
+          ),
         ),
-      ),
       ),
     );
   }

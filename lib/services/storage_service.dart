@@ -230,4 +230,12 @@ class StorageService {
   Future<void> saveDailyListenDate(String d) async {
     await _prefs?.setString(_keyListenDate, d);
   }
+
+  // --- Genel amacli anahtarlar (gunluk gorevler, diyar sandiklari) ---
+  String? readString(String key) => _prefs?.getString('kids_talk_$key');
+  Future<void> writeString(String key, String v) async => _prefs?.setString('kids_talk_$key', v);
+  int readInt(String key) => _prefs?.getInt('kids_talk_$key') ?? 0;
+  Future<void> writeInt(String key, int v) async => _prefs?.setInt('kids_talk_$key', v);
+  List<String> readList(String key) => _prefs?.getStringList('kids_talk_$key') ?? <String>[];
+  Future<void> writeList(String key, List<String> v) async => _prefs?.setStringList('kids_talk_$key', v);
 }

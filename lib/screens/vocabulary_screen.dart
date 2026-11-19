@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/sound_service.dart';
 import '../state/app_state.dart';
+import '../theme/kids_theme.dart';
 
 class VocabularyItem {
   final String english;
@@ -86,74 +87,33 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final appState = context.watch<AppState>();
     final learned = appState.learnedWords.toSet();
 
+    final masteredCount = _vocabList.where((v) => learned.contains(v.english)).length;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFBF9FE),
+      backgroundColor: Colors.white,
+      // Ust kisim renkli baslik (diger ekranlarla ayni dil); alt bosluk menude
       body: SafeArea(
+        top: false,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 650),
             child: Column(
               children: [
-                // Ust Baslik & Istatistik
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.purple.shade50,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.purple.shade200, width: 1),
-                            ),
-                            child: const Text(
-                              "WORD VAULT 📚",
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1.2,
-                                color: Color(0xFF8E24AA),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              "Visual Word Cards",
-                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF263238)),
-                            ),
-                          ),
-                        ],
-                      ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.shade50,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.amber.shade300, width: 1.5),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.stars_rounded, color: Colors.amber, size: 20),
-                            const SizedBox(width: 4),
-                            Text(
-                              "${_vocabList.where((v) => learned.contains(v.english)).length} / ${_vocabList.length} Mastered",
-                              style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFE65100), fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                KidsHeader(
+                  title: 'Word Vault',
+                  subtitle: 'Tap, listen and collect words!',
+                  color: KidsColors.gem,
+                  image: 'assets/images/gigi_thinking.png',
+                  trailing: SizedBox(
+                    width: 200,
+                    child: FatProgressBar(
+                      value: masteredCount / _vocabList.length,
+                      label: '$masteredCount / ${_vocabList.length} mastered',
+                      color: KidsColors.gold,
+                    ),
                   ),
                 ),
+                const SizedBox(height: 14),
 
                 // Kategori Cipleri (Yatay Liste)
                 SizedBox(

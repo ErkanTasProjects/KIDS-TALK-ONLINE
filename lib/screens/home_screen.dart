@@ -1,15 +1,18 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../data/curriculum_data.dart';
 import '../services/sound_service.dart';
 import '../state/app_state.dart';
+import '../theme/kids_theme.dart';
 import '../utils/page_transitions.dart';
-import '../widgets/kids_characters.dart';
-import '../widgets/weekly_league_dialog.dart';
 import 'lesson_screen.dart';
 
-/// Kids Talk Online - Duolingo Tarzi Macera Haritasi (Learning Path)
-/// 60-120 FPS akici performans, 3D dokunmatik butonlar ve sevimli karakterler.
+/// Ana harita: "Gigi'nin Safari Yolu".
+/// Tek, surekli kivrimli bir patika; her seviye ayri renkli bir diyar.
+/// Diyar basligi kaydirirken ustte yapisik kalir ve diyar degisince degisir.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -17,832 +20,378 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final List<String> _stages = ['Starter', 'Movers', 'Flyers'];
+// Yerlesim sabitleri (kaydirma hedefini hesaplamak icin deterministik)
+const double _bannerH = 104;
+const double _trailTop = 34;
+const double _rowH = 118;
+const double _chestRowH = 128;
+const double _trailBottom = 40;
+
+double _trailHeight(int nodes) => _trailTop + nodes * _rowH + _chestRowH + _trailBottom;
+
+/// Dalga seklinde yatay kayma (merkezden piksel). Duolingo'dan farkli olarak
+/// tek yone uzun bir "S" kivrimi cizer.
+const List<double> _wave = [0, -78, -104, -60, 18, 86, 104, 56];
+
+class _HomeScreenState extends State<HomeScreen> {
+  final ScrollController _scroll = ScrollController();
+  bool _showJump = false;
+  bool _jumpUp = true;
+  bool _didInitialScroll = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _stages.length, vsync: this);
+    _scroll.addListener(_updateJumpButton);
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _scroll.dispose();
     super.dispose();
+  }
+
+  /// Siradaki dersin kaydirma konumu (merkezde gorunecek sekilde).
+  double? _currentOffset(AppState s, double viewport) {
+    final current = s.currentActivity;
+    if (current == null) return null;
+    double y = 0;
+    for (final land in Land.all) {
+      final list = CurriculumData.getActivitiesByStage(land.stage);
+      final idx = list.indexWhere((a) => a.id == current.id);
+      if (idx == -1) {
+        y += _bannerH + _trailHeight(list.length);
+        continue;
+      }
+      y += _bannerH + _trailTop + idx * _rowH + _rowH / 2;
+      return math.max(0, y - viewport * 0.45);
+    }
+    return null;
+  }
+
+  void _updateJumpButton() {
+    if (!_scroll.hasClients) return;
+    final s = context.read<AppState>();
+    final viewport = _scroll.position.viewportDimension;
+    final target = _currentOffset(s, viewport);
+    final show = target != null && (target - _scroll.offset).abs() > viewport * 0.6;
+    final up = target != null && target < _scroll.offset;
+    if (show != _showJump || up != _jumpUp) {
+      setState(() {
+        _showJump = show;
+        _jumpUp = up;
+      });
+    }
+  }
+
+  void _jumpToCurrent({bool animate = true}) {
+    if (!_scroll.hasClients) return;
+    final s = context.read<AppState>();
+    final target = _currentOffset(s, _scroll.position.viewportDimension);
+    if (target == null) return;
+    final clamped = target.clamp(0.0, _scroll.position.maxScrollExtent);
+    if (animate) {
+      _scroll.animateTo(clamped, duration: const Duration(milliseconds: 650), curve: Curves.easeInOutCubic);
+    } else {
+      _scroll.jumpTo(clamped);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9F7FC),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
-            child: Column(
-              children: [
-                // UST BASLIK & ISTATISTIK BARI (Streak, XP, Can, Ses)
-                _buildTopHeader(appState),
-
-                // SEVIYE SECICI TAB BARI (Starter, Movers, Flyers)
-                _buildStageTabs(),
-
-                // DUOLINGO TARZI KIVRIMLI HARITA
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: _stages.map((stage) {
-                      return _DuolingoPathView(
-                        stage: stage,
-                        appState: appState,
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // UST ISTATISTIK & PROFIL BARI
-  // -------------------------------------------------------------------------
-  Widget _buildTopHeader(AppState appState) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Colors.purple.shade50, width: 2),
-        ),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Corner Logo & Title with Giraffe Emblem
-              Flexible(
-                child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.amber.shade400, width: 2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.amber.withValues(alpha: 0.2),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(3),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/images/giraffe_logo.png',
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Center(
-                          child: Text("🦒", style: TextStyle(fontSize: 24)),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF3E0),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFFFB74D), width: 1),
-                        ),
-                        child: const Text(
-                          "KIDS TALK ONLINE 🦒",
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.1,
-                            color: Color(0xFFE65100),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          "English World",
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF2D3748),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  ),
-                ],
-              ),
-              ),
-
-              // Sag Kisim: Muzik Butonu + Yuksek Kaliteli Gigi Avatari
-              Row(
-                children: [
-                  // Muzik Ac/Kapa Butonu
-                  GestureDetector(
-                    onTap: () {
-                      appState.toggleMusic();
-                      SoundService().setAudioSettings(
-                        soundEnabled: appState.isSoundEnabled,
-                        musicEnabled: appState.isMusicEnabled,
-                      );
-                      SoundService().playTap();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      margin: const EdgeInsets.only(right: 10),
-                      decoration: BoxDecoration(
-                        color: appState.isMusicEnabled ? Colors.purple.shade50 : Colors.grey.shade100,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: appState.isMusicEnabled ? Colors.purple.shade200 : Colors.grey.shade300,
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Icon(
-                        appState.isMusicEnabled ? Icons.music_note_rounded : Icons.music_off_rounded,
-                        size: 20,
-                        color: appState.isMusicEnabled ? const Color(0xFF8E24AA) : Colors.grey,
-                      ),
-                    ),
-                  ),
-
-                  // Gigi Avatari
-                  GestureDetector(
-                    onTap: () {
-                      SoundService().playPop();
-                      SoundService().speakEnglish("Hello! I am Gigi! Let's explore new English adventures!");
-                    },
-                    child: Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.amber, width: 2.5),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.amber.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.all(4),
-                      child: Image.asset(
-                        'assets/images/user_mascot_optimized.png',
-                        fit: BoxFit.contain,
-                        filterQuality: FilterQuality.high,
-                        errorBuilder: (context, error, stackTrace) => const Center(
-                          child: Text("🦒", style: TextStyle(fontSize: 28)),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Sik Referans Tarzi Kapsul Haplari (Language, Streak, Gems, Hearts, XP League)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Dil Kapsulu
-                _buildCapsulePill(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF6C5CE7),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text('EN', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
-                      ),
-                      const SizedBox(width: 5),
-                      const Text(
-                        'English',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF2D3748)),
-                      ),
-                    ],
-                  ),
-                  borderColor: const Color(0xFF6C5CE7).withValues(alpha: 0.3),
-                  onTap: () {
-                    SoundService().playTap();
-                  },
-                ),
-                const SizedBox(width: 6),
-
-                // Streak (Alev)
-                _buildCapsulePill(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('🔥', style: TextStyle(fontSize: 14)),
-                      const SizedBox(width: 4),
-                      Text('${appState.streak}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFFFF9800))),
-                    ],
-                  ),
-                  borderColor: Colors.orange.shade200,
-                  onTap: () {
-                    SoundService().playPop();
-                    SoundService().speakEnglish("${appState.streak} day streak!");
-                  },
-                ),
-                const SizedBox(width: 6),
-
-                // Elmaslar (Gems)
-                _buildCapsulePill(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('💎', style: TextStyle(fontSize: 13)),
-                      const SizedBox(width: 4),
-                      Text('${appState.gems}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFF00ACC1))),
-                    ],
-                  ),
-                  borderColor: Colors.cyan.shade200,
-                  onTap: () {
-                    SoundService().playVictory();
-                    SoundService().speakEnglish("You have ${appState.gems} diamonds!");
-                  },
-                ),
-                const SizedBox(width: 6),
-
-                // Canlar (Hearts)
-                _buildCapsulePill(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('💖', style: TextStyle(fontSize: 13)),
-                      const SizedBox(width: 4),
-                      Text('${appState.hearts}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFFE53935))),
-                    ],
-                  ),
-                  borderColor: Colors.red.shade200,
-                  // Eskiden kalbe dokunmak canlari bedavaya dolduruyordu
-                  onTap: () => _showHeartsInfo(context, appState),
-                ),
-                const SizedBox(width: 6),
-
-                // XP Ligi (Weekly XP League Modal)
-                _buildCapsulePill(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('🛡️', style: TextStyle(fontSize: 13)),
-                      const SizedBox(width: 4),
-                      Text('${appState.xp} XP', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF8E24AA))),
-                    ],
-                  ),
-                  borderColor: Colors.purple.shade200,
-                  onTap: () => WeeklyLeagueDialog.show(context),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Can bilgisi: dolu mu, sonraki can ne zaman, elmasla doldurma.
-  void _showHeartsInfo(BuildContext context, AppState appState) {
-    appState.refreshHearts();
-    SoundService().playPop();
-    final full = appState.isVip || appState.hearts >= AppState.maxHearts;
-    final wait = appState.timeToNextHeart;
-    final mins = wait == null ? 0 : (wait.inSeconds / 60).ceil();
-    final canBuy = appState.gems >= AppState.heartRefillCost;
-
-    if (full) {
-      SoundService().speakEnglish("Full hearts! Ready to play!");
+    // Ilk acilista siradaki derse kaydir
+    if (appState.isLoaded && !_didInitialScroll) {
+      _didInitialScroll = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _jumpToCurrent(animate: false);
+        _updateJumpButton();
+      });
     }
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text(
-          appState.isVip ? "💖 Unlimited hearts" : "💖 ${appState.hearts} / ${AppState.maxHearts}",
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontWeight: FontWeight.w900),
-        ),
-        content: Text(
-          full
-              ? "Your hearts are full. Ready to play!"
-              : "A wrong answer costs 1 heart.\nNext heart in $mins min.",
-          textAlign: TextAlign.center,
-        ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text("OK")),
-          if (!full)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00ACC1),
-                foregroundColor: Colors.white,
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _TopStatsBar(appState: appState),
+            Expanded(
+              child: Stack(
+                children: [
+                  CustomScrollView(
+                    controller: _scroll,
+                    physics: const BouncingScrollPhysics(),
+                    slivers: [
+                      for (final land in Land.all)
+                        SliverMainAxisGroup(
+                          slivers: [
+                            PinnedHeaderSliver(child: _LandBanner(land: land, appState: appState)),
+                            SliverToBoxAdapter(child: _LandTrail(land: land, appState: appState)),
+                          ],
+                        ),
+                      const SliverToBoxAdapter(child: _TrailEnd()),
+                    ],
+                  ),
+                  // "Siradaki derse don" butonu
+                  Positioned(
+                    right: 16,
+                    bottom: 18,
+                    child: AnimatedScale(
+                      scale: _showJump ? 1 : 0,
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutBack,
+                      child: JellyButton(
+                        color: Colors.white,
+                        shadow: KidsColors.line,
+                        depth: 4,
+                        padding: const EdgeInsets.all(14),
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () {
+                          SoundService().playTap();
+                          _jumpToCurrent();
+                        },
+                        child: Icon(
+                          _jumpUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                          color: KidsColors.gem,
+                          size: 28,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              onPressed: canBuy
-                  ? () {
-                      appState.refillHeartsWithGems();
-                      SoundService().playCorrect();
-                      SoundService().speakEnglish("Hearts refilled!");
-                      Navigator.of(ctx).pop();
-                    }
-                  : null,
-              child: Text("REFILL 💎 ${AppState.heartRefillCost}"),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCapsulePill({
-    required Widget child,
-    required Color borderColor,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: borderColor, width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
             ),
           ],
         ),
-        child: child,
-      ),
-    );
-  }
-
-  
-
-  Widget _buildStageTabs() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.purple.shade100, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.purple.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: TabBar(
-        controller: _tabController,
-        indicator: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF8E24AA), Color(0xFFAB47BC)],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.purple.withValues(alpha: 0.3),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            )
-          ],
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        labelColor: Colors.white,
-        unselectedLabelColor: const Color(0xFF6A1B9A),
-        labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-        dividerColor: Colors.transparent,
-        tabs: const [
-          Tab(text: "🌱 STARTER"),
-          Tab(text: "🚀 MOVERS"),
-          Tab(text: "🌟 FLYERS"),
-        ],
       ),
     );
   }
 }
 
 // =========================================================================
-// DUOLINGO TARZI KIVRIMLI HARITA GORUNUMU (_DuolingoPathView)
+// UST ISTATISTIK CUBUGU
 // =========================================================================
-class _DuolingoPathView extends StatelessWidget {
-  final String stage;
+class _TopStatsBar extends StatelessWidget {
   final AppState appState;
-
-  const _DuolingoPathView({
-    required this.stage,
-    required this.appState,
-  });
-
-  /// Ilk ders hep acik; digerleri bir onceki ders (tum mufredat sirasinda)
-  /// en az 1 yildizla bitince acilir. Eski kayitlar icin Starter ilerleme
-  /// indeksi de gecerli sayilir.
-  bool _isUnlocked(ActivityItem activity) {
-    final all = CurriculumData.activities;
-    final globalIndex = all.indexWhere((a) => a.id == activity.id);
-    if (globalIndex <= 0) return true;
-    if (activity.stage.toLowerCase() == 'starter') {
-      final starterIndex = CurriculumData.getActivitiesByStage('Starter').indexWhere((a) => a.id == activity.id);
-      if (starterIndex <= appState.currentLevelIndex) return true;
-    }
-    final prev = all[globalIndex - 1];
-    if (appState.getStarsFor(prev.id) > 0) return true;
-    // Onceki ders Starter'da ilerleme indeksiyle tamamlanmis olabilir
-    if (prev.stage.toLowerCase() == 'starter') {
-      final prevStarterIndex = CurriculumData.getActivitiesByStage('Starter').indexWhere((a) => a.id == prev.id);
-      return prevStarterIndex < appState.currentLevelIndex;
-    }
-    return false;
-  }
-
-  /// Bu asamada bitirilen ders sayisi (eskiden her asamada "x of 5" sabitti).
-  int _completedIn(String stage) {
-    final list = CurriculumData.getActivitiesByStage(stage);
-    var done = 0;
-    for (var i = 0; i < list.length; i++) {
-      final starterDone = stage.toLowerCase() == 'starter' && i < appState.currentLevelIndex;
-      if (appState.getStarsFor(list[i].id) > 0 || starterDone) done++;
-    }
-    return done;
-  }
+  const _TopStatsBar({required this.appState});
 
   @override
   Widget build(BuildContext context) {
-    final activities = CurriculumData.getActivitiesByStage(stage);
-
-    return ListView.builder(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      itemCount: activities.length + 1, // +1 for the Unit Header
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return _buildUnitBanner(stage);
-        }
-
-        final activityIndex = index - 1;
-        final activity = activities[activityIndex];
-
-        // Seviye kilit ve durum mantigi: dersler mufredat sirasiyla tek tek acilir.
-        // Eskiden Starter bitince Movers VE Flyers'in tum dersleri birden aciliyordu
-        // (ustelik Starter ders sayisi koda 4 olarak gomuluydu).
-        final bool isUnlocked = _isUnlocked(activity);
-        final bool isCompleted = appState.getStarsFor(activity.id) > 0 ||
-            (stage.toLowerCase() == 'starter' && activityIndex < appState.currentLevelIndex);
-        final bool isCurrent = isUnlocked &&
-            !isCompleted &&
-            activities.indexWhere((a) => _isUnlocked(a) && appState.getStarsFor(a.id) == 0) == activityIndex;
-
-        // Duolingo zikzak x-offseti: 0: Merkez, 1: Sag (+65), 2: Merkez, 3: Sol (-65)
-        final int pattern = activityIndex % 4;
-        double xOffset = 0.0;
-        if (pattern == 1) xOffset = 65.0;
-        if (pattern == 3) xOffset = -65.0;
-
-        // Her 3 seviyede bir bonus sandik gosterimi
-        final bool showTreasure = (activityIndex + 1) % 4 == 0 && activityIndex > 0;
-
-        return Column(
-          children: [
-            // Seviye Dugumu (Node)
-            _DuolingoNodeItem(
-              activity: activity,
-              levelNumber: activityIndex + 1,
-              isUnlocked: isUnlocked,
-              isCompleted: isCompleted,
-              isCurrent: isCurrent,
-              xOffset: xOffset,
-              stars: appState.getStarsFor(activity.id),
-              onTap: () => _handleNodeTap(context, activity, isUnlocked),
-            ),
-
-            // Noktali Yol Ilerleme Izi (Reference App Dotted Path)
-            if (activityIndex < activities.length - 1)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(3, (i) {
-                    return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E3A5F).withValues(alpha: 0.45),
-                        shape: BoxShape.circle,
-                      ),
-                    );
-                  }),
-                ),
+    final streakOn = appState.streak > 0;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+      color: Colors.white,
+      child: Row(
+        children: [
+          // Kasif avatari
+          GestureDetector(
+            onTap: () {
+              SoundService().playPop();
+              SoundService().speakEnglish("Hello! I am Gigi! Let's explore new English adventures!");
+            },
+            child: Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(appState.avatarColor).withValues(alpha: 0.25),
+                border: Border.all(color: Color(appState.avatarColor), width: 2.5),
               ),
-
-            // Bonus Hazine Sandigi
-            if (showTreasure)
-              _buildTreasureChest(context, activityIndex),
-          ],
-        );
-      },
+              padding: const EdgeInsets.all(3),
+              child: ClipOval(
+                child: Image.asset('assets/images/user_mascot_optimized.png', fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Center(child: Text('🦒'))),
+              ),
+            ),
+          ),
+          const Spacer(),
+          _Stat(
+            icon: const _EnBadge(),
+            value: '${appState.totalStars}',
+            color: KidsColors.ink,
+            onTap: () => SoundService().speakEnglish("You have ${appState.totalStars} stars!"),
+          ),
+          const Spacer(),
+          _Stat(
+            icon: Text('🔥', style: TextStyle(fontSize: 22, color: streakOn ? null : Colors.grey)),
+            value: '${appState.streak}',
+            color: streakOn ? KidsColors.flame : KidsColors.inkSoft,
+            onTap: () => SoundService().speakEnglish("${appState.streak} day streak!"),
+          ),
+          const Spacer(),
+          _Stat(
+            icon: const Text('💎', style: TextStyle(fontSize: 21)),
+            value: '${appState.gems}',
+            color: KidsColors.gem,
+            onTap: () => SoundService().speakEnglish("You have ${appState.gems} diamonds!"),
+          ),
+          const Spacer(),
+          _Stat(
+            icon: const Text('💖', style: TextStyle(fontSize: 21)),
+            value: appState.isVip ? '∞' : '${appState.hearts}',
+            color: KidsColors.heart,
+            onTap: () => showHeartsInfo(context, appState),
+          ),
+        ],
+      ),
     );
   }
+}
 
-  Widget _buildUnitBanner(String stage) {
-    String unitTitle = "UNIT 1";
-    String unitName = "First Steps & Greetings";
-    String description = "Greetings, Family Members & School";
-    Color primaryColor = const Color(0xFF4CAF50);
-    Color lightBg = const Color(0xFFE8F5E9);
+class _EnBadge extends StatelessWidget {
+  const _EnBadge();
 
-    if (stage == 'Movers') {
-      unitTitle = "UNIT 2";
-      unitName = "Adventure Station";
-      description = "Daily Routines, Hobbies & Classes";
-      primaryColor = const Color(0xFF8E24AA);
-      lightBg = const Color(0xFFF3E5F5);
-    } else if (stage == 'Flyers') {
-      unitTitle = "UNIT 3";
-      unitName = "Champions League";
-      description = "Fluent Speaking & Self Introduction";
-      primaryColor = const Color(0xFFFF9800);
-      lightBg = const Color(0xFFFFF3E0);
-    }
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3B82F6),
+        borderRadius: BorderRadius.circular(6),
+        border: const Border(bottom: BorderSide(color: Color(0xFF1D4ED8), width: 2.5)),
+      ),
+      child: const Text('EN', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900)),
+    );
+  }
+}
 
-    String islandEmblem = '🦁';
-    if (stage == 'Movers') islandEmblem = '🦒';
-    if (stage == 'Flyers') islandEmblem = 'abc';
+class _Stat extends StatelessWidget {
+  final Widget icon;
+  final String value;
+  final Color color;
+  final VoidCallback onTap;
+  const _Stat({required this.icon, required this.value, required this.color, required this.onTap});
 
-    return Column(
-      children: [
-        // Ada Ust Baslik & Ada Rozeti (Reference App "Animal Island" Stili)
-        Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            children: [
-              // Ada Rozeti (Merkez Emoji Kutucugu)
-              Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(22),
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryColor.withValues(alpha: 0.18),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(islandEmblem, style: const TextStyle(fontSize: 42)),
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              // Ilerleme Kapsulu (Orn: 0 of 5 ✓)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey.shade300, width: 1.5),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      "${_completedIn(stage)} of ${CurriculumData.getActivitiesByStage(stage).length}",
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF2D3748),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.check_rounded, size: 16, color: Color(0xFF4CAF50)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Guidebook & AI Roleplay Mor Hap Butonu
-              GestureDetector(
-                onTap: () {
-                  SoundService().playTap();
-                  SoundService().speakEnglish("Welcome to Guidebook and AI Roleplay with Gigi!");
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6C5CE7),
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF6C5CE7).withValues(alpha: 0.35),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.menu_book_rounded, color: Colors.white, size: 18),
-                      SizedBox(width: 8),
-                      Text(
-                        "Guidebook & AI Roleplay",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        SoundService().playPop();
+        onTap();
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            icon,
+            const SizedBox(width: 5),
+            Text(value, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: color)),
+          ],
         ),
+      ),
+    );
+  }
+}
 
-        // Unite Bilgilendirme Karti
-        Container(
-          margin: const EdgeInsets.only(bottom: 24),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: lightBg,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: primaryColor.withValues(alpha: 0.4), width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: primaryColor.withValues(alpha: 0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+/// Can bilgisi: dolu mu, sonraki can ne zaman, elmasla doldurma.
+void showHeartsInfo(BuildContext context, AppState appState) {
+  appState.refreshHearts();
+  final full = appState.isVip || appState.hearts >= AppState.maxHearts;
+  final wait = appState.timeToNextHeart;
+  final mins = wait == null ? 0 : (wait.inSeconds / 60).ceil();
+  final canBuy = appState.gems >= AppState.heartRefillCost;
+
+  if (full) SoundService().speakEnglish("Full hearts! Ready to play!");
+
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Text(
+        appState.isVip ? "💖 Unlimited hearts" : "💖 ${appState.hearts} / ${AppState.maxHearts}",
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontWeight: FontWeight.w900),
+      ),
+      content: Text(
+        full ? "Your hearts are full. Ready to play!" : "A wrong answer costs 1 heart.\nNext heart in $mins min.",
+        textAlign: TextAlign.center,
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actions: [
+        TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text("OK")),
+        if (!full)
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: KidsColors.gem, foregroundColor: Colors.white),
+            onPressed: canBuy
+                ? () {
+                    appState.refillHeartsWithGems();
+                    SoundService().playCorrect();
+                    SoundService().speakEnglish("Hearts refilled!");
+                    Navigator.of(ctx).pop();
+                  }
+                : null,
+            child: Text("REFILL 💎 ${AppState.heartRefillCost}"),
           ),
-          child: Row(
-            children: [
-              Expanded(
+      ],
+    ),
+  );
+}
+
+// =========================================================================
+// DIYAR BASLIGI (yapisik)
+// =========================================================================
+class _LandBanner extends StatelessWidget {
+  final Land land;
+  final AppState appState;
+  const _LandBanner({required this.land, required this.appState});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = CurriculumData.getActivitiesByStage(land.stage).length;
+    final done = appState.completedInStage(land.stage);
+    return Container(
+      height: _bannerH,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: land.color,
+          borderRadius: BorderRadius.circular(20),
+          border: Border(bottom: BorderSide(color: land.dark, width: 5)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 8, 8, 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: primaryColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        unitTitle,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
                     Text(
-                      unitName,
+                      "LAND ${land.number} · ${land.stage.toUpperCase()} · $done/$total",
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: primaryColor,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      description,
-                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "${land.emoji} ${land.name}",
+                        style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w900),
                       ),
                     ),
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryColor.withValues(alpha: 0.2),
-                      blurRadius: 6,
-                    )
-                  ],
-                ),
-                child: Icon(Icons.menu_book_rounded, color: primaryColor, size: 28),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTreasureChest(BuildContext context, int index) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 18),
-      child: GestureDetector(
-        onTap: () {
-          SoundService().playVictory();
-          appState.addXp(25);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: const Color(0xFFFF9800),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              content: const Row(
-                children: [
-                  const Text("🎁", style: TextStyle(fontSize: 22)),
-                  const SizedBox(width: 10),
-                  const Text(
-                    "Awesome! +25 Bonus XP Earned!",
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
-                  ),
-                ],
-              ),
             ),
-          );
-        },
-        child: Column(
-          children: [
-            Container(
-              width: 65,
-              height: 65,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFE082),
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFFFB300), width: 3),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.amber.withValues(alpha: 0.4),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const Center(
-                child: Text("🎁", style: TextStyle(fontSize: 34)),
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              "Bonus Chest",
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFFF57C00),
+            // Rehber kitabi
+            Container(width: 2, height: double.infinity, color: land.dark.withValues(alpha: 0.5)),
+            InkWell(
+              borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+              onTap: () => _showGuide(context),
+              child: const SizedBox(
+                width: 64,
+                child: Center(child: Icon(Icons.menu_book_rounded, color: Colors.white, size: 28)),
               ),
             ),
           ],
@@ -851,368 +400,610 @@ class _DuolingoPathView extends StatelessWidget {
     );
   }
 
-  void _handleNodeTap(BuildContext context, ActivityItem activity, bool isUnlocked) {
-    if (!isUnlocked) {
-      SoundService().playWrong();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF424242),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          content: const Row(
-            children: [
-              Icon(Icons.lock_rounded, color: Colors.amber, size: 20),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  "This level is locked! Complete previous lessons to unlock.",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+  void _showGuide(BuildContext context) {
+    SoundService().playPop();
+    final list = CurriculumData.getActivitiesByStage(land.stage);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.8),
+        padding: EdgeInsets.fromLTRB(20, 18, 20, 20 + MediaQuery.viewPaddingOf(ctx).bottom),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(color: KidsColors.line, borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text("${land.emoji} ${land.name} Guide",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: land.dark)),
+            const SizedBox(height: 4),
+            Text(land.subtitle, style: const TextStyle(color: KidsColors.inkSoft, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 14),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: list.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (_, i) {
+                  final a = list[i];
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: land.light,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(ActivityIcon.emojiFor(a.activityType), style: const TextStyle(fontSize: 26)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(a.title,
+                                  style: const TextStyle(fontWeight: FontWeight.w900, color: KidsColors.ink)),
+                              Text("${a.stageNumber} · ${a.topic}",
+                                  style: const TextStyle(fontSize: 12, color: KidsColors.inkSoft)),
+                            ],
+                          ),
+                        ),
+                        if (appState.isCompleted(a)) const Text('✅'),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// DIYAR PATIKASI: dugumler + kesikli yol + karakterler + sandik
+// =========================================================================
+class _LandTrail extends StatelessWidget {
+  final Land land;
+  final AppState appState;
+  const _LandTrail({required this.land, required this.appState});
+
+  @override
+  Widget build(BuildContext context) {
+    final activities = CurriculumData.getActivitiesByStage(land.stage);
+    final landUnlocked = appState.isStageUnlocked(land.stage);
+    final current = appState.currentActivity;
+
+    return LayoutBuilder(builder: (context, c) {
+      final w = c.maxWidth;
+      final scale = (w / 420).clamp(0.72, 1.0);
+      double xFor(int i) => w / 2 + _wave[i % _wave.length] * scale;
+      double yFor(int i) => _trailTop + i * _rowH + _rowH / 2;
+
+      final centers = <Offset>[
+        for (var i = 0; i < activities.length; i++) Offset(xFor(i), yFor(i)),
+      ];
+      final chestCenter = Offset(w / 2 + 40 * scale, _trailTop + activities.length * _rowH + _chestRowH / 2);
+      final points = [...centers, chestCenter];
+      final reached = <bool>[
+        for (var i = 0; i < activities.length; i++) appState.isUnlocked(activities[i]),
+        appState.isStageComplete(land.stage),
+      ];
+
+      // Karakterler dalganin bos tarafina yerlesir
+      final mascotSize = 150 * scale;
+
+      return SizedBox(
+        height: _trailHeight(activities.length),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(painter: _TrailPainter(points: points, reached: reached, color: land.color)),
+            ),
+            // Karakter A: ust kivrimin karsi tarafi (sag)
+            Positioned(
+              right: 6,
+              top: _trailTop + _rowH * 0.55,
+              child: _Mascot(path: land.mascotA, height: mascotSize, active: landUnlocked),
+            ),
+            // Karakter B: sandigin karsisinda (sol)
+            Positioned(
+              left: 14,
+              top: _trailTop + activities.length * _rowH - 6,
+              child: _Mascot(path: land.mascotB, height: mascotSize * 0.72, active: landUnlocked, flip: true),
+            ),
+            for (var i = 0; i < activities.length; i++)
+              Positioned(
+                left: centers[i].dx - _TrailNode.size / 2,
+                top: centers[i].dy - _TrailNode.size / 2 - 6,
+                child: _TrailNode(
+                  activity: activities[i],
+                  land: land,
+                  unlocked: appState.isUnlocked(activities[i]),
+                  completed: appState.isCompleted(activities[i]),
+                  isCurrent: current?.id == activities[i].id,
+                  stars: appState.getStarsFor(activities[i].id),
                 ),
               ),
-            ],
-          ),
+            Positioned(
+              left: chestCenter.dx - 42,
+              top: chestCenter.dy - 42,
+              child: _LandChest(land: land, appState: appState),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
+class _TrailPainter extends CustomPainter {
+  final List<Offset> points;
+  final List<bool> reached;
+  final Color color;
+  _TrailPainter({required this.points, required this.reached, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (var i = 0; i < points.length - 1; i++) {
+      final a = points[i];
+      final b = points[i + 1];
+      final path = Path()
+        ..moveTo(a.dx, a.dy)
+        ..cubicTo(a.dx, a.dy + (b.dy - a.dy) * 0.55, b.dx, b.dy - (b.dy - a.dy) * 0.55, b.dx, b.dy);
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 9
+        ..color = reached[i + 1] ? color.withValues(alpha: 0.45) : KidsColors.locked;
+      // Kesikli cizgi: patika "ayak izi" gibi
+      for (final metric in path.computeMetrics()) {
+        double d = 0;
+        while (d < metric.length) {
+          final seg = metric.extractPath(d, math.min(d + 12, metric.length));
+          canvas.drawPath(seg, paint);
+          d += 22;
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrailPainter old) =>
+      old.points != points || old.reached.toString() != reached.toString() || old.color != color;
+}
+
+class _Mascot extends StatelessWidget {
+  final String path;
+  final double height;
+  final bool active;
+  final bool flip;
+  const _Mascot({required this.path, required this.height, required this.active, this.flip = false});
+
+  // Kilitli diyarda karakterler gri (henuz ulasilmadi hissi)
+  static const _grey = ColorFilter.matrix(<double>[
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0, 0, 0, 0.45, 0,
+  ]);
+
+  @override
+  Widget build(BuildContext context) {
+    Widget img = Image.asset(path, height: height, fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => SizedBox(height: height));
+    if (flip) img = Transform.flip(flipX: true, child: img);
+    if (!active) img = ColorFiltered(colorFilter: _grey, child: img);
+    return IgnorePointer(child: img);
+  }
+}
+
+/// Patikadaki ders tasi: 3D "jole" yuvarlatilmis kare.
+class _TrailNode extends StatefulWidget {
+  static const double size = 78;
+  final ActivityItem activity;
+  final Land land;
+  final bool unlocked;
+  final bool completed;
+  final bool isCurrent;
+  final int stars;
+
+  const _TrailNode({
+    required this.activity,
+    required this.land,
+    required this.unlocked,
+    required this.completed,
+    required this.isCurrent,
+    required this.stars,
+  });
+
+  @override
+  State<_TrailNode> createState() => _TrailNodeState();
+}
+
+class _TrailNodeState extends State<_TrailNode> with SingleTickerProviderStateMixin {
+  late final AnimationController _bounce =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isCurrent) _bounce.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TrailNode old) {
+    super.didUpdateWidget(old);
+    if (widget.isCurrent && !_bounce.isAnimating) _bounce.repeat(reverse: true);
+    if (!widget.isCurrent && _bounce.isAnimating) _bounce.stop();
+  }
+
+  @override
+  void dispose() {
+    _bounce.dispose();
+    super.dispose();
+  }
+
+  void _tap(BuildContext context) {
+    if (!widget.unlocked) {
+      SoundService().playWrong();
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text("🔒 Finish the lesson before this one to unlock it!"),
         ),
       );
       return;
     }
-
-    // Duolingo Tarzi Bolum Onizleme ve Baslama Penceresi
     SoundService().playTap();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => _LessonStartBottomSheet(activity: activity),
+      builder: (ctx) => _LessonStartBottomSheet(activity: widget.activity, land: widget.land),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final land = widget.land;
+    final face = widget.unlocked ? land.color : KidsColors.locked;
+    final lip = widget.unlocked ? land.dark : KidsColors.lockedDark;
+    const s = _TrailNode.size;
+
+    final tile = JellyButton(
+      width: s,
+      height: s - 8,
+      depth: 8,
+      color: face,
+      shadow: lip,
+      padding: EdgeInsets.zero,
+      borderRadius: BorderRadius.circular(26),
+      onTap: () => _tap(context),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // ust parlama
+          Positioned(
+            top: 7,
+            left: 12,
+            child: Container(
+              width: 22,
+              height: 8,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: widget.unlocked ? 0.35 : 0.6),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          widget.unlocked
+              ? Text(ActivityIcon.emojiFor(widget.activity.activityType), style: const TextStyle(fontSize: 32))
+              : const Icon(Icons.lock_rounded, color: KidsColors.lockedDark, size: 32),
+        ],
+      ),
+    );
+
+    return SizedBox(
+      width: s,
+      height: s + 18,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          // Siradaki ders: etrafinda halka
+          if (widget.isCurrent)
+            Positioned(
+              top: -9,
+              child: Container(
+                width: s + 18,
+                height: s + 10,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(34),
+                  border: Border.all(color: land.color.withValues(alpha: 0.3), width: 5),
+                ),
+              ),
+            ),
+          tile,
+          // Tamamlananlar: yildizlar
+          if (widget.completed)
+            Positioned(
+              bottom: -4,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(3, (i) {
+                  final filled = i < (widget.stars > 0 ? widget.stars : 3);
+                  return Icon(Icons.star_rounded, size: 19, color: filled ? KidsColors.gold : KidsColors.locked);
+                }),
+              ),
+            ),
+          // Siradaki ders: ziplayan "START" balonu
+          if (widget.isCurrent)
+            Positioned(
+              top: -50,
+              child: AnimatedBuilder(
+                animation: _bounce,
+                builder: (_, child) => Transform.translate(
+                  offset: Offset(0, -6 * Curves.easeInOut.transform(_bounce.value)),
+                  child: child,
+                ),
+                child: _StartBubble(color: land.color),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
 
-// =========================================================================
-// DUOLINGO 3D BUTON DUGUMU (_DuolingoNodeItem)
-// =========================================================================
-class _DuolingoNodeItem extends StatelessWidget {
-  final ActivityItem activity;
-  final int levelNumber;
-  final bool isUnlocked;
-  final bool isCompleted;
-  final bool isCurrent;
-  final double xOffset;
-  final int stars;
-  final VoidCallback onTap;
-
-  const _DuolingoNodeItem({
-    required this.activity,
-    required this.levelNumber,
-    required this.isUnlocked,
-    required this.isCompleted,
-    required this.isCurrent,
-    required this.xOffset,
-    required this.stars,
-    required this.onTap,
-  });
+class _StartBubble extends StatelessWidget {
+  final Color color;
+  const _StartBubble({required this.color});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 14),
-      child: Transform.translate(
-        offset: Offset(xOffset, 0),
-        child: Column(
-          children: [
-            // Aktif seviyedeki Gigi Maskotu ve Konusma Balonu
-            if (isCurrent)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Minik Gigi
-                    SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: Image.asset(
-                        'assets/images/user_mascot_optimized.png',
-                        fit: BoxFit.contain,
-                        filterQuality: FilterQuality.high,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    // Konusma Baloncugu
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFF58CC02), width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: const Text(
-                        "START! 🚀",
-                        style: TextStyle(
-                          color: Color(0xFF46A302),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: KidsColors.line, width: 2),
+          ),
+          child: Text("START", style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 1)),
+        ),
+        CustomPaint(size: const Size(16, 8), painter: _TrianglePainter()),
+      ],
+    );
+  }
+}
 
-            // Cift Halkali (Double Concentric Ring) Referans Buton Dugumu
-            GestureDetector(
-              onTap: onTap,
-              child: Stack(
-                alignment: Alignment.center,
-                clipBehavior: Clip.none,
-                children: [
-                  // Dis Halka (Outer Ring)
-                  Container(
-                    width: 88,
-                    height: 88,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isUnlocked
-                            ? (isCompleted ? const Color(0xFFFFB300) : const Color(0xFF1E3A5F))
-                            : const Color(0xFFD8D8E2),
-                        width: isCurrent ? 4.0 : 3.5,
-                      ),
-                      boxShadow: isCurrent
-                          ? [
-                              BoxShadow(
-                                color: const Color(0xFF4CD964).withValues(alpha: 0.35),
-                                blurRadius: 12,
-                                spreadRadius: 3,
-                              ),
-                            ]
-                          : null,
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isUnlocked
-                            ? (isCompleted ? const Color(0xFFFFC800) : const Color(0xFF4CD964))
-                            : const Color(0xFFE2E2EA),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          '$levelNumber',
-                          style: TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w900,
-                            color: isUnlocked ? Colors.white : const Color(0xFF757588),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+class _TrianglePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawPath(path, Paint()..color = Colors.white);
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, 0)
+        ..lineTo(size.width / 2, size.height)
+        ..lineTo(size.width, 0),
+      Paint()
+        ..color = KidsColors.line
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
 
-                  // Kilit Rozeti (Sag alt kose)
-                  if (!isUnlocked)
-                    Positioned(
-                      bottom: 4,
-                      right: 4,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(Icons.lock_rounded, size: 14, color: Color(0xFF757588)),
-                      ),
-                    ),
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Diyar sonu hazine sandigi: diyar bitince acilir, +30 elmas.
+class _LandChest extends StatelessWidget {
+  final Land land;
+  final AppState appState;
+  const _LandChest({required this.land, required this.appState});
+
+  @override
+  Widget build(BuildContext context) {
+    final opened = appState.isLandChestOpened(land.stage);
+    final ready = appState.isStageComplete(land.stage) && !opened;
+
+    return SizedBox(
+      width: 84,
+      height: 84,
+      child: JellyButton(
+        width: 84,
+        height: 72,
+        depth: 7,
+        padding: EdgeInsets.zero,
+        borderRadius: BorderRadius.circular(22),
+        color: ready ? KidsColors.gold : (opened ? land.light : KidsColors.locked),
+        shadow: ready ? KidsColors.goldDark : (opened ? land.color.withValues(alpha: 0.35) : KidsColors.lockedDark),
+        onTap: () {
+          if (ready) {
+            appState.openLandChest(land.stage);
+            SoundService().playVictory();
+            SoundService().speakEnglish("Treasure chest opened!");
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                title: const Text("🎁 Treasure!", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900)),
+                content: Text("You finished ${land.name}!\n+${AppState.landChestGems} 💎",
+                    textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                actionsAlignment: MainAxisAlignment.center,
+                actions: [
+                  ElevatedButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text("YAY! ⭐")),
                 ],
               ),
-            ),
-
-            // Tamamlanmissa 3 Yildiz Gosterimi
-            if (isCompleted)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List.generate(3, (starIdx) {
-                    final bool filled = starIdx < (stars > 0 ? stars : 3);
-                    return Icon(
-                      Icons.star_rounded,
-                      size: 18,
-                      color: filled ? const Color(0xFFFFB300) : Colors.grey.shade300,
-                    );
-                  }),
-                ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                // Yana kaydirilan (zikzak) dugumlerde uzun baslik ekrandan cikmasin
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 170),
-                  child: Text(
-                    activity.title,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: isUnlocked ? const Color(0xFF2D3748) : Colors.grey,
-                    ),
-                  ),
-                ),
+            );
+          } else if (opened) {
+            SoundService().playPop();
+          } else {
+            SoundService().playWrong();
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                behavior: SnackBarBehavior.floating,
+                content: Text("🎁 Finish every lesson in ${land.name} to open this chest!"),
               ),
-          ],
+            );
+          }
+        },
+        child: Text(
+          opened ? '💎' : '🎁',
+          style: TextStyle(fontSize: 38, color: ready || opened ? null : Colors.grey),
         ),
       ),
     );
   }
 }
 
-// =========================================================================
-// BOLUM BASLAMA BOTTOM SHEET PENCERESI (_LessonStartBottomSheet)
-// =========================================================================
-class _LessonStartBottomSheet extends StatelessWidget {
-  final ActivityItem activity;
-
-  const _LessonStartBottomSheet({required this.activity});
+class _TrailEnd extends StatelessWidget {
+  const _TrailEnd();
 
   @override
   Widget build(BuildContext context) {
-    final characterInfo = KidsCharacterInfo.fromName(activity.characterName);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
+      child: Column(
+        children: [
+          Image.asset('assets/images/giraffe_mascot.png', height: 120,
+              errorBuilder: (_, __, ___) => const SizedBox(height: 120)),
+          const SizedBox(height: 8),
+          const Text(
+            "More adventures coming soon! 🚀",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: KidsColors.inkSoft, fontWeight: FontWeight.w800, fontSize: 15),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-    // Alt bosluga sistem gezinme cubugu yuksekligi eklenir; yoksa START
-    // butonu telefonun alt cubugunun altinda kaliyordu.
+// =========================================================================
+// DERS BASLATMA PENCERESI
+// =========================================================================
+class _LessonStartBottomSheet extends StatelessWidget {
+  final ActivityItem activity;
+  final Land land;
+
+  const _LessonStartBottomSheet({required this.activity, required this.land});
+
+  @override
+  Widget build(BuildContext context) {
+    // Alt bosluga sistem gezinme cubugu yuksekligi eklenir
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
     return Container(
-      padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + bottomInset),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      padding: EdgeInsets.fromLTRB(22, 14, 22, 20 + bottomInset),
+      decoration: BoxDecoration(
+        color: land.color,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Tutamac cizgisi
-          Container(
-            width: 44,
-            height: 5,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(10),
+          Center(
+            child: Container(
+              width: 44,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
-          const SizedBox(height: 18),
-
-          // Karakter Avatari ve Baslik
+          const SizedBox(height: 14),
           Row(
             children: [
-              AnimatedKidsCharacter(
-                character: characterInfo.type,
-                size: 70,
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Center(
+                  child: Text(ActivityIcon.emojiFor(activity.activityType), style: const TextStyle(fontSize: 34)),
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: characterInfo.primaryColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        "${activity.stage.toUpperCase()} • ${activity.stageNumber}",
-                        style: TextStyle(
-                          color: characterInfo.primaryColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                        ),
+                    Text(
+                      "${land.stage.toUpperCase()} ${activity.stageNumber} · ${ActivityIcon.labelFor(activity.activityType).toUpperCase()}",
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.6,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       activity.title,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF2D3748),
-                      ),
-                    ),
-                    Text(
-                      activity.topic,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade600,
-                      ),
+                      style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: Colors.white),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
-
-          // Karakter Tavsiyesi / Sozu
+          const SizedBox(height: 14),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFF9F7FC),
+              color: Colors.white.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.purple.shade100),
             ),
-            child: Row(
-              children: [
-                const Icon(Icons.tips_and_updates_rounded, color: Colors.amber, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    activity.characterQuote,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF4A148C),
-                      height: 1.3,
-                    ),
-                  ),
-                ),
-              ],
+            child: Text(
+              "🦒 ${activity.characterQuote}",
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.white, height: 1.3),
             ),
           ),
-          const SizedBox(height: 22),
-
-          // 3D Duolingo Tarzi BASLA Butonu
-          GestureDetector(
+          const SizedBox(height: 18),
+          JellyButton(
+            width: double.infinity,
+            height: 54,
+            color: Colors.white,
+            shadow: land.dark,
+            depth: 5,
+            padding: EdgeInsets.zero,
+            borderRadius: BorderRadius.circular(18),
             onTap: () {
               final navigator = Navigator.of(context);
               final appState = context.read<AppState>();
               navigator.pop();
               appState.refreshHearts();
               if (!appState.canPlay) {
-                // Can yoksa ders baslamasin (eskiden 0 canla da oynaniyordu)
+                // Can yoksa ders baslamasin
                 SoundService().playWrong();
                 ScaffoldMessenger.of(navigator.context).showSnackBar(
                   const SnackBar(
@@ -1223,40 +1014,11 @@ class _LessonStartBottomSheet extends StatelessWidget {
                 return;
               }
               SoundService().playTap();
-              navigator.push(
-                AppPageRoute(
-                  page: LessonScreen(activity: activity),
-                ),
-              );
+              navigator.push(AppPageRoute(page: LessonScreen(activity: activity)));
             },
-            child: Container(
-              width: double.infinity,
-              height: 54,
-              decoration: BoxDecoration(
-                color: const Color(0xFF58CC02),
-                borderRadius: BorderRadius.circular(18),
-                border: const Border(
-                  bottom: BorderSide(color: Color(0xFF46A302), width: 5),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF58CC02).withValues(alpha: 0.35),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const Center(
-                child: Text(
-                  "START! 🚀",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.1,
-                  ),
-                ),
-              ),
+            child: Text(
+              "START +${15 * 3} XP",
+              style: TextStyle(color: land.dark, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1),
             ),
           ),
         ],

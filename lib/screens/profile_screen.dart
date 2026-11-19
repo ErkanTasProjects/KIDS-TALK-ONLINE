@@ -6,6 +6,7 @@ import '../state/app_state.dart';
 import '../utils/app_strings.dart';
 import '../widgets/parent_gate.dart';
 import '../widgets/weekly_league_dialog.dart';
+import '../theme/kids_theme.dart';
 import 'explorer_builder_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -134,204 +135,121 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final appState = context.watch<AppState>();
     final isTurkish = appState.isTurkish;
 
+    final league = WeeklyLeagueDialog.leagues.lastWhere((l) => appState.xp >= l.minXp,
+        orElse: () => WeeklyLeagueDialog.leagues.first);
+    final lessonsDone = CurriculumData.activities.where(appState.isCompleted).length;
+    final land = Land.of(appState.currentActivity?.stage ?? 'Flyers');
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFBF9FE),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 650),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      backgroundColor: Colors.white,
+      body: ListView(
+        padding: EdgeInsets.zero,
+        physics: const BouncingScrollPhysics(),
+        children: [
+          // 1. Kapak: diyar renginde zemin + buyuk kasif
+          _ProfileHero(appState: appState, color: land.color, onSettings: () {
+            SoundService().playTap();
+            final ctx = _settingsKey.currentContext;
+            if (ctx != null) {
+              Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+            }
+          }),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Ogrenci Pasaport Karti
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF6A1B9A), Color(0xFF8E24AA), Color(0xFFAB47BC)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(26),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.purple.withValues(alpha: 0.28),
-                        blurRadius: 14,
-                        offset: const Offset(0, 5),
-                      )
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      // Zurafa Maskot Avatari
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.amber, width: 3),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.amber.withValues(alpha: 0.35),
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
-                            )
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: Image.asset(
-                            'assets/images/user_mascot_optimized.png',
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Center(
-                              child: Text("🦒", style: TextStyle(fontSize: 40)),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                "${appState.currentStage.toUpperCase()} ${'STAGE'}",
-                                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.1),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              "${appState.userName} ⭐",
-                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Kids Talk Online Student',
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                Text(
+                  appState.userName,
+                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: KidsColors.ink),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "${land.emoji} ${land.name.toUpperCase()} EXPLORER",
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: KidsColors.inkSoft,
+                    letterSpacing: 1,
                   ),
                 ),
-                const SizedBox(height: 12),
-
-                // Kasif Ozellestirme & Haftalik Lig Kisayolu
+                const SizedBox(height: 16),
+                // Kurs / ders / lig ozet satiri
+                Row(
+                  children: [
+                    _miniStat(
+                      const Text('EN', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w900)),
+                      'Course',
+                    ),
+                    _miniStatText('$lessonsDone / ${CurriculumData.activities.length}', 'Lessons'),
+                    _miniStatText(league.icon, league.name.replaceAll(' League', '')),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
-                      child: GestureDetector(
+                      child: JellyButton(
+                        color: Colors.white,
+                        shadow: KidsColors.line,
+                        depth: 4,
+                        borderRadius: BorderRadius.circular(16),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
                         onTap: () {
                           SoundService().playTap();
                           Navigator.of(context).push(
                             MaterialPageRoute(builder: (_) => const ExplorerBuilderScreen()),
                           );
                         },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0xFFFF9800), width: 1.5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.orange.withValues(alpha: 0.1),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('🎨', style: TextStyle(fontSize: 18)),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                'CUSTOMIZE EXPLORER',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: land.dark, fontWeight: FontWeight.w900, fontSize: 14),
                               ),
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text("🎨", style: TextStyle(fontSize: 18)),
-                              SizedBox(width: 8),
-                              Text(
-                                "Customize Explorer",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 12,
-                                  color: Color(0xFFE65100),
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => WeeklyLeagueDialog.show(context),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0xFF6C5CE7), width: 1.5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF6C5CE7).withValues(alpha: 0.1),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text("🛡️", style: TextStyle(fontSize: 18)),
-                              SizedBox(width: 8),
-                              Text(
-                                "XP League",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 12,
-                                  color: Color(0xFF512DA8),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    JellyButton(
+                      color: Colors.white,
+                      shadow: KidsColors.line,
+                      depth: 4,
+                      borderRadius: BorderRadius.circular(16),
+                      padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+                      onTap: () => WeeklyLeagueDialog.show(context),
+                      child: const Text('🏆', style: TextStyle(fontSize: 20)),
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 26),
 
-                // 2. Istatistik Izgarasi
-                Row(
+                // 2. Genel bakis kartlari
+                const SectionLabel('Overview'),
+                GridView.count(
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 2.3,
                   children: [
-                    _buildStatCard(
-                      Icons.star_rounded,
-                      Colors.amber,
-                      "${appState.totalStars}",
-                      AppStrings.tr('stars_earned', isTurkish),
-                    ),
-                    const SizedBox(width: 10),
-                    _buildStatCard(
-                      Icons.local_fire_department_rounded,
-                      Colors.orange,
-                      "${appState.streak} ${'d'}",
-                      AppStrings.tr('streak_days', isTurkish),
-                    ),
-                    const SizedBox(width: 10),
-                    _buildStatCard(
-                      Icons.bolt_rounded,
-                      Colors.purple,
-                      "${appState.xp}",
-                      AppStrings.tr('total_xp', isTurkish),
-                    ),
+                    _overviewTile('🔥', '${appState.streak}', appState.streak == 1 ? 'day streak' : 'days streak'),
+                    _overviewTile('⚡', '${appState.xp}', 'total XP'),
+                    _overviewTile('⭐', '${appState.totalStars}', AppStrings.tr('stars_earned', isTurkish)),
+                    _overviewTile('💎', '${appState.gems}', 'gems'),
                   ],
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 26),
+                SectionLabel('Settings', key: _settingsKey),
 
                 // 3. DIL AYARLARI KARTI (Hocanin Istedigi Veli Dil Secenegi)
                 Container(
@@ -560,37 +478,129 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildStatCard(IconData icon, Color color, String value, String label) {
+  final GlobalKey _settingsKey = GlobalKey();
+
+  Widget _miniStat(Widget icon, String label) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
-          boxShadow: [
-            BoxShadow(color: color.withValues(alpha: 0.08), blurRadius: 6, offset: const Offset(0, 2))
-          ],
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
-              child: Icon(icon, color: color, size: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFF3B82F6),
+              borderRadius: BorderRadius.circular(7),
+              border: const Border(bottom: BorderSide(color: Color(0xFF1D4ED8), width: 3)),
             ),
-            const SizedBox(height: 6),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-            const SizedBox(height: 2),
-            Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 11, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-          ],
-        ),
+            child: icon,
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(color: KidsColors.inkSoft, fontWeight: FontWeight.w700, fontSize: 14)),
+        ],
       ),
     );
   }
+
+  Widget _miniStatText(String value, String label) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value, style: const TextStyle(color: KidsColors.ink, fontWeight: FontWeight.w900, fontSize: 18)),
+          const SizedBox(height: 2),
+          Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: KidsColors.inkSoft, fontWeight: FontWeight.w700, fontSize: 14)),
+        ],
+      ),
+    );
+  }
+
+  Widget _overviewTile(String emoji, String value, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: KidsColors.line, width: 2),
+      ),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 26)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(value,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: KidsColors.ink)),
+                ),
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: KidsColors.inkSoft)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+}
+
+/// Profil kapagi: renkli zemin, buyuk kasif figuru, ayarlar kisayolu.
+class _ProfileHero extends StatelessWidget {
+  final AppState appState;
+  final Color color;
+  final VoidCallback onSettings;
+  const _ProfileHero({required this.appState, required this.color, required this.onSettings});
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top;
+    return Container(
+      height: 250 + top,
+      color: color,
+      child: Stack(
+        children: [
+          Positioned(left: -40, top: top + 40, child: _circle(140, Colors.white.withValues(alpha: 0.10))),
+          Positioned(right: -30, bottom: -30, child: _circle(170, Colors.white.withValues(alpha: 0.10))),
+          Positioned(
+            top: top + 6,
+            right: 8,
+            child: IconButton(
+              onPressed: onSettings,
+              icon: const Icon(Icons.settings_rounded, color: Colors.white, size: 30),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Center(
+              child: Image.asset(
+                'assets/images/gigi_waving.png',
+                height: 225,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Text('🦒', style: TextStyle(fontSize: 90)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _circle(double s, Color c) =>
+      Container(width: s, height: s, decoration: BoxDecoration(color: c, shape: BoxShape.circle));
 }

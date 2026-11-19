@@ -276,6 +276,11 @@ class AppState extends ChangeNotifier {
       _storage.saveCurrentLevelIndex(_currentLevelIndex);
     }
 
+    // Gunluk gorev sayaclari
+    _rollDaily();
+    _storage.writeInt('daily_lessons', _storage.readInt('daily_lessons') + 1);
+    _storage.writeInt('daily_stars', _storage.readInt('daily_stars') + stars);
+
     // Yildiz basina XP ve elmas odulu (1 yildiz = 15 XP + 5 elmas)
     _gems += 5 * stars;
     _storage.saveGems(_gems);
@@ -312,6 +317,102 @@ class AppState extends ChangeNotifier {
   }
 
   bool get hasThreeStarLesson => _activityStars.values.any((v) => v >= 3);
+
+  // --- Ders kilitleri (tum ekranlar ayni kurali kullanir) ---
+  /// Ders tamamlandi mi? (Yildiz ya da eski kayitlarda Starter ilerleme indeksi)
+  bool isCompleted(ActivityItem activity) {
+    if (getStarsFor(activity.id) > 0) return true;
+    if (activity.stage.toLowerCase() == 'starter') {
+      final i = CurriculumData.getActivitiesByStage('Starter').indexWhere((a) => a.id == activity.id);
+      return i != -1 && i < _currentLevelIndex;
+    }
+    return false;
+  }
+
+  /// Ilk ders hep acik; digerleri mufredat sirasindaki onceki ders bitince acilir.
+  bool isUnlocked(ActivityItem activity) {
+    final all = CurriculumData.activities;
+    final i = all.indexWhere((a) => a.id == activity.id);
+    if (i <= 0) return true;
+    return isCompleted(activity) || isCompleted(all[i - 1]);
+  }
+
+  /// Siradaki oynanacak ders (hepsi bittiyse null).
+  ActivityItem? get currentActivity {
+    for (final a in CurriculumData.activities) {
+      if (isUnlocked(a) && !isCompleted(a)) return a;
+    }
+    return null;
+  }
+
+  int completedInStage(String stage) =>
+      CurriculumData.getActivitiesByStage(stage).where(isCompleted).length;
+
+  bool isStageComplete(String stage) =>
+      completedInStage(stage) == CurriculumData.getActivitiesByStage(stage).length;
+
+  bool isStageUnlocked(String stage) {
+    final list = CurriculumData.getActivitiesByStage(stage);
+    return list.isNotEmpty && isUnlocked(list.first);
+  }
+
+  // --- Diyar sonu hazine sandiklari ---
+  static const int landChestGems = 30;
+  bool isLandChestOpened(String stage) => _storage.readList('land_chests').contains(stage);
+
+  /// Diyardaki tum dersler bittiyse sandigi acar (+30 elmas). Bir kez acilir.
+  bool openLandChest(String stage) {
+    if (isLandChestOpened(stage) || !isStageComplete(stage)) return false;
+    _storage.writeList('land_chests', [..._storage.readList('land_chests'), stage]);
+    _gems += landChestGems;
+    _storage.saveGems(_gems);
+    notifyListeners();
+    return true;
+  }
+
+  // --- Gunluk gorevler (her gun sifirlanir) ---
+  static const int questGems = 10;
+
+  void _rollDaily() {
+    final today = _todayKey();
+    if (_storage.readString('daily_date') != today) {
+      _storage.writeString('daily_date', today);
+      _storage.writeInt('daily_lessons', 0);
+      _storage.writeInt('daily_stars', 0);
+      _storage.writeList('daily_claimed', []);
+    }
+  }
+
+  int get dailyLessons {
+    _rollDaily();
+    return _storage.readInt('daily_lessons');
+  }
+
+  int get dailyStars {
+    _rollDaily();
+    return _storage.readInt('daily_stars');
+  }
+
+  bool isQuestClaimed(String id) {
+    _rollDaily();
+    return _storage.readList('daily_claimed').contains(id);
+  }
+
+  /// Gorev odulunu alir (+10 elmas). Gorev tamamlanmadiysa ya da alindiysa false.
+  bool claimQuest(String id, {required bool done}) {
+    if (!done || isQuestClaimed(id)) return false;
+    _storage.writeList('daily_claimed', [..._storage.readList('daily_claimed'), id]);
+    _gems += questGems;
+    _storage.saveGems(_gems);
+    notifyListeners();
+    return true;
+  }
+
+  /// Gun sonuna kalan sure (gorev geri sayimi icin).
+  Duration get timeLeftToday {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day + 1).difference(n);
+  }
 
   // VIP (Star Club) uyeligi
   void setVip(bool value) {
