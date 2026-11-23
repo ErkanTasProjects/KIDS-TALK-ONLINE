@@ -1,17 +1,34 @@
-# kids_talk_online
+# Kids Talk Online 🦒
 
-A new Flutter project.
+Çocuklar için İngilizce öğrenimini eğlenceli ve interaktif hale getiren Flutter tabanlı mobil ve web uygulaması.
 
-## Getting Started
+## 🚀 Özellikler
+- **Cambridge Young Learners Müfredatı:** Starter, Movers ve Flyers seviyeleri
+- **İnteraktif Aktiviteler:** Eşleştirme, Sürükle & Bırak, Cümle Kurma, Balon Patlatma, Hafıza Kartları ve Sesli Alıştırmalar
+- **Maskot Desteği:** Sevimli zürafa Gigi ve Piko ile motive edici öğrenim
+- **Ödül & Lig Sistemi:** Yıldızlar, elmaslar ve haftalık lig sıralaması
 
-This project is a starting point for a Flutter application.
+## 🛠️ Kurulum ve Çalıştırma
 
-A few resources to get you started if this is your first Flutter project:
+### Bağımlılıkları Yükleme
+```bash
+flutter pub get
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+### Uygulamayı Çalıştırma
+```bash
+# Web üzerinde çalıştırmak için:
+flutter run -d chrome
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# Android cihaz/emülatörde çalıştırmak için:
+flutter run -d android
+
+# Windows üzerinde çalıştırmak için:
+flutter run -d windows
+```
+
+## 📱 Desteklenen Platformlar
+- Android
+- iOS
+- Web
+- Windows Desktop
